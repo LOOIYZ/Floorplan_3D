@@ -3,47 +3,155 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Faculty Floor Plan · 3D</title>
+    <title>Faculty Floor Plan · 3D Navigator</title>
     <meta
       name="description"
-      content="Interactive 3D model of the faculty floor plans for Block A and Block B."
+      content="Interactive 3D model and smart indoor wayfinding for the faculty floor plans (Block A & Block B)."
     />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link
-      href="https://fonts.googleapis.com/css2?family=Jost:wght@300;400;500;600;700&display=swap"
+      href="https://fonts.googleapis.com/css2?family=Jost:wght@300;400;500;600;700&family=JetBrains+Mono:wght@500;600&display=swap"
       rel="stylesheet"
     />
   </head>
   <body>
+    <!-- Global SVG Sprite for Crisp Vector Icons -->
+    <svg xmlns="http://www.w3.org/2000/svg" style="display: none;">
+      <symbol id="icon-compass" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <circle cx="12" cy="12" r="10"></circle>
+        <polygon points="16.24 7.76 14.12 14.12 7.76 16.24 9.88 9.88 16.24 7.76" fill="currentColor" fill-opacity="0.2"></polygon>
+      </symbol>
+      <symbol id="icon-layers" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <polygon points="12 2 2 7 12 12 22 7 12 2"></polygon>
+        <polyline points="2 17 12 22 22 17"></polyline>
+        <polyline points="2 12 12 17 22 12"></polyline>
+      </symbol>
+      <symbol id="icon-search" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <circle cx="11" cy="11" r="8"></circle>
+        <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+      </symbol>
+      <symbol id="icon-swap" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M7 16V4m0 0L3 8m4-4l4 4"></path>
+        <path d="M17 8v12m0 0l4-4m-4 4l-4-4"></path>
+      </symbol>
+      <symbol id="icon-mosque" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M12 3a4 4 0 0 0-4 4v1H3v13h18V8h-5V7a4 4 0 0 0-4-4z"></path>
+        <path d="M10 21v-4a2 2 0 1 1 4 0v4"></path>
+        <circle cx="12" cy="7" r="1"></circle>
+      </symbol>
+      <symbol id="icon-laptop" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <rect x="3" y="4" width="18" height="12" rx="2"></rect>
+        <line x1="2" y1="20" x2="22" y2="20"></line>
+      </symbol>
+      <symbol id="icon-microscope" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M6 18h8"></path>
+        <path d="M3 22h18"></path>
+        <path d="M14 22a7 7 0 1 0-7-7"></path>
+        <path d="M9 14l3-3"></path>
+        <path d="M12 6l5 5"></path>
+        <path d="M11 3l6 6"></path>
+      </symbol>
+      <symbol id="icon-briefcase" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <rect x="2" y="7" width="20" height="14" rx="2" ry="2"></rect>
+        <path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"></path>
+      </symbol>
+      <symbol id="icon-gradcap" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M22 10v6M2 10l10-5 10 5-10 5z"></path>
+        <path d="M6 12v5c0 2 2 3 6 3s6-1 6-3v-5"></path>
+      </symbol>
+      <symbol id="icon-share" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8"></path>
+        <polyline points="16 6 12 2 8 6"></polyline>
+        <line x1="12" y1="2" x2="12" y2="15"></line>
+      </symbol>
+      <symbol id="icon-wheelchair" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <circle cx="12" cy="4" r="2"></circle>
+        <path d="M18 19a5 5 0 1 1-10 0"></path>
+        <path d="M12 6v6h4l3 7"></path>
+      </symbol>
+      <symbol id="icon-cube" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"></path>
+        <polyline points="3.27 6.96 12 12.01 20.73 6.96"></polyline>
+        <line x1="12" y1="22.08" x2="12" y2="12"></line>
+      </symbol>
+      <symbol id="icon-topdown" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <rect x="3" y="3" width="18" height="18" rx="2"></rect>
+        <circle cx="12" cy="12" r="3"></circle>
+      </symbol>
+      <symbol id="icon-fit" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <polyline points="15 3 21 3 21 9"></polyline>
+        <polyline points="9 21 3 21 3 15"></polyline>
+        <polyline points="21 15 21 21 15 21"></polyline>
+        <polyline points="3 9 3 3 9 3"></polyline>
+      </symbol>
+      <symbol id="icon-cross" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <line x1="18" y1="6" x2="6" y2="18"></line>
+        <line x1="6" y1="6" x2="18" y2="18"></line>
+      </symbol>
+    </svg>
+
     <div id="app">
       <canvas id="scene"></canvas>
       <div id="labels" class="label-layer"></div>
+
+      <!-- Floating Viewport Controls (North Compass & Camera Presets) -->
+      <div class="viewport-hud" id="viewport-hud" hidden>
+        <button class="compass-btn" id="compass-btn" title="North Compass · Click to re-align North" aria-label="North orientation compass">
+          <span class="compass-ring"></span>
+          <span class="compass-needle" id="compass-needle">
+            <span class="needle-n">N</span>
+            <span class="needle-s"></span>
+          </span>
+        </button>
+
+        <div class="camera-presets" role="toolbar" aria-label="Camera Presets">
+          <button class="preset-btn" id="preset-iso" title="Perspective / Isometric View" aria-label="Isometric 3D view">
+            <svg class="ui-icon" aria-hidden="true"><use href="#icon-cube"></use></svg>
+            <span class="preset-label">3D</span>
+          </button>
+          <button class="preset-btn" id="preset-top" title="Top-down 2D View" aria-label="Top-down view">
+            <svg class="ui-icon" aria-hidden="true"><use href="#icon-topdown"></use></svg>
+            <span class="preset-label">Top</span>
+          </button>
+          <button class="preset-btn" id="preset-fit" title="Fit Entire Building in View" aria-label="Fit building in view">
+            <svg class="ui-icon" aria-hidden="true"><use href="#icon-fit"></use></svg>
+            <span class="preset-label">Fit</span>
+          </button>
+        </div>
+      </div>
 
       <!-- Dedicated Full-Screen Home Page / Decision Screen -->
       <div class="home-screen" id="home-screen">
         <div class="home-screen__container">
           <header class="home-screen__header">
-            <div class="home-badge">FACULTY OF COMPUTING &amp; INFORMATICS</div>
+            <div class="home-badge">
+              <span class="home-badge__dot"></span>
+              Faculty of Computer Science and Information Technology
+            </div>
             <h1 class="home-screen__title">Floor Plan <span class="accent">3D</span></h1>
             <p class="home-screen__subtitle">Block A &amp; Block B · Interactive Campus Navigator</p>
           </header>
 
           <div class="home-cards">
             <button class="home-card home-card--directions" id="card-go-directions">
-              <div class="home-card__icon-wrap">🧭</div>
+              <div class="home-card__icon-wrap">
+                <svg class="card-icon" aria-hidden="true"><use href="#icon-compass"></use></svg>
+              </div>
               <div class="home-card__body">
                 <h3>Find Directions</h3>
-                <p>Get step-by-step route between rooms and entrances.</p>
+                <p>Get step-by-step route between rooms, lifts, and entrances.</p>
                 <span class="home-card__cta">Get Directions →</span>
               </div>
             </button>
 
             <button class="home-card home-card--explore" id="card-go-explore">
-              <div class="home-card__icon-wrap">🗺️</div>
+              <div class="home-card__icon-wrap">
+                <svg class="card-icon" aria-hidden="true"><use href="#icon-layers"></use></svg>
+              </div>
               <div class="home-card__body">
                 <h3>View Floor Plan</h3>
-                <p>Explore 3D levels 1–6, filter room categories, and inspect the building layout.</p>
+                <p>Explore 3D levels 1–6, filter room categories, and inspect building layout.</p>
                 <span class="home-card__cta">Explore 3D Map →</span>
               </div>
             </button>
@@ -51,14 +159,21 @@
 
           <section class="field home-quick-search">
             <label class="field__label" for="home-search">Quick Room Search</label>
-            <div class="search">
+            <div class="search search--hero">
+              <span class="search__icon" aria-hidden="true">
+                <svg class="ui-icon"><use href="#icon-search"></use></svg>
+              </span>
               <input
                 id="home-search"
                 type="search"
-                placeholder="Search any room (e.g. MM3, Surau, CCNA)…"
+                placeholder="Search any room (e.g. MM2, Surau, CCNA, DK1)…"
                 autocomplete="off"
                 spellcheck="false"
               />
+              <kbd class="search__kbd" title="Shortcut">Ctrl K</kbd>
+              <button type="button" class="search__clear" id="home-search-clear" hidden aria-label="Clear search">
+                <svg class="ui-icon-xs"><use href="#icon-cross"></use></svg>
+              </button>
               <ul id="home-results" class="results" hidden></ul>
             </div>
           </section>
@@ -66,11 +181,26 @@
           <section class="field home-shortcuts">
             <span class="field__label">Popular Destinations</span>
             <div class="chips" id="home-chips">
-              <button class="chip-btn" data-query="Surau">🕌 Surau</button>
-              <button class="chip-btn" data-query="CCNA">💻 Makmal CCNA</button>
-              <button class="chip-btn" data-query="Mikro">🔬 Makmal Mikro</button>
-              <button class="chip-btn" data-query="Office">👔 Office</button>
-              <button class="chip-btn" data-query="Dewan">🎓 Dewan Kuliah</button>
+              <button class="chip-btn" data-query="Surau">
+                <svg class="chip-icon" aria-hidden="true"><use href="#icon-mosque"></use></svg>
+                Surau
+              </button>
+              <button class="chip-btn" data-query="CCNA">
+                <svg class="chip-icon" aria-hidden="true"><use href="#icon-laptop"></use></svg>
+                Makmal CCNA
+              </button>
+              <button class="chip-btn" data-query="Mikro">
+                <svg class="chip-icon" aria-hidden="true"><use href="#icon-microscope"></use></svg>
+                Makmal Mikro
+              </button>
+              <button class="chip-btn" data-query="Office">
+                <svg class="chip-icon" aria-hidden="true"><use href="#icon-briefcase"></use></svg>
+                Faculty Office
+              </button>
+              <button class="chip-btn" data-query="Dewan">
+                <svg class="chip-icon" aria-hidden="true"><use href="#icon-gradcap"></use></svg>
+                Dewan Kuliah
+              </button>
             </div>
           </section>
         </div>
@@ -80,35 +210,49 @@
       <aside class="panel" id="main-panel">
         <header class="panel__head" id="panel-head">
           <div class="subnav" id="subnav">
-            <button id="btn-back-home" class="subnav__home" title="Return to Home">
+            <button id="btn-back-home" class="subnav__home" title="Return to Home Screen">
               <span class="subnav__arrow">←</span> Home
             </button>
-            <div class="subnav__tabs">
-              <button data-tab="explore" class="subnav__tab" id="nav-btn-explore">🗺️ Floorplan</button>
-              <button data-tab="directions" class="subnav__tab" id="nav-btn-directions">🧭 Directions</button>
+            <div class="subnav__tabs" role="tablist">
+              <button data-tab="explore" class="subnav__tab" id="nav-btn-explore" role="tab" aria-selected="false">
+                <svg class="tab-icon" aria-hidden="true"><use href="#icon-layers"></use></svg>
+                Floorplan
+              </button>
+              <button data-tab="directions" class="subnav__tab" id="nav-btn-directions" role="tab" aria-selected="false">
+                <svg class="tab-icon" aria-hidden="true"><use href="#icon-compass"></use></svg>
+                Directions
+              </button>
             </div>
           </div>
         </header>
 
         <!-- ---------------- EXPLORE / VIEW FLOORPLAN VIEW ---------------- -->
         <div class="panel__scroll" id="tab-explore" hidden>
-
           <section class="field">
-            <span class="field__label">Levels</span>
+            <div class="field__header-row">
+              <span class="field__label">Levels</span>
+              <label class="toggle toggle--header is-active" id="toggle-levels-all-label" title="Toggle activate or deactivate all floors">
+                <span class="toggle__status" id="toggle-levels-all-status">All Active</span>
+                <input type="checkbox" id="toggle-levels-all" checked />
+                <span class="toggle__track"><span class="toggle__thumb"></span></span>
+              </label>
+            </div>
             <div class="levels" id="levels"></div>
           </section>
 
           <section class="field">
             <span class="field__label">3D View</span>
             <div class="segmented" id="view-mode">
-              <button data-mode="stack">Stacked</button>
               <button data-mode="explode" class="is-active">Exploded</button>
               <button data-mode="single">Single</button>
             </div>
           </section>
 
           <section class="field" id="spread-field">
-            <label class="field__label" for="spread">Floor Separation</label>
+            <div class="field__header-row">
+              <label class="field__label" for="spread">Floor Separation</label>
+              <span class="field__val" id="spread-val">45%</span>
+            </div>
             <input id="spread" type="range" min="0" max="100" value="45" />
           </section>
 
@@ -117,25 +261,34 @@
             <div class="toggles">
               <label class="toggle">
                 <input type="checkbox" id="toggle-labels" checked />
-                <span>Room labels</span>
+                <span class="toggle__track"><span class="toggle__thumb"></span></span>
+                <span class="toggle__text">Room labels</span>
               </label>
               <label class="toggle">
                 <input type="checkbox" id="toggle-walls" checked />
-                <span>Walls</span>
+                <span class="toggle__track"><span class="toggle__thumb"></span></span>
+                <span class="toggle__text">Walls</span>
               </label>
               <label class="toggle">
                 <input type="checkbox" id="toggle-top" />
-                <span>Top-down view</span>
+                <span class="toggle__track"><span class="toggle__thumb"></span></span>
+                <span class="toggle__text">Top-down view</span>
               </label>
               <label class="toggle">
                 <input type="checkbox" id="toggle-shadows" checked />
-                <span>Shadows</span>
+                <span class="toggle__track"><span class="toggle__thumb"></span></span>
+                <span class="toggle__text">Shadows</span>
               </label>
             </div>
           </section>
 
           <section class="field">
-            <span class="field__label">Room Categories</span>
+            <div class="field__header-row">
+              <span class="field__label">Room Categories</span>
+              <button class="categories__show-all-btn" id="btn-show-all-categories" type="button" title="Show all room categories" disabled>
+                Show All
+              </button>
+            </div>
             <ul class="legend" id="legend"></ul>
           </section>
 
@@ -146,36 +299,60 @@
 
         <!-- ---------------- DIRECTIONS VIEW ---------------- -->
         <div class="panel__scroll" id="tab-directions" hidden>
-          <section class="field">
-            <div class="search">
-              <input
-                id="origin"
-                type="search"
-                placeholder="Where are you starting from?"
-                autocomplete="off"
-                spellcheck="false"
-              />
-              <ul id="origin-results" class="results" hidden></ul>
+          <div class="wayfinding-inputs">
+            <section class="field">
+              <div class="search search--panel">
+                <span class="search__icon" aria-hidden="true">
+                  <span class="point-marker point-marker--origin">A</span>
+                </span>
+                <input
+                  id="origin"
+                  type="search"
+                  placeholder="Where are you starting from?"
+                  autocomplete="off"
+                  spellcheck="false"
+                />
+                <button type="button" class="search__clear" id="origin-clear" hidden aria-label="Clear starting point">
+                  <svg class="ui-icon-xs"><use href="#icon-cross"></use></svg>
+                </button>
+                <ul id="origin-results" class="results" hidden></ul>
+              </div>
+            </section>
+
+            <div class="swap-row">
+              <button class="swap-btn" id="btn-swap-route" type="button" title="Swap origin and destination" aria-label="Swap starting point and destination">
+                <svg class="ui-icon"><use href="#icon-swap"></use></svg>
+              </button>
             </div>
-          </section>
+
+            <section class="field">
+              <div class="search search--panel">
+                <span class="search__icon" aria-hidden="true">
+                  <span class="point-marker point-marker--dest">B</span>
+                </span>
+                <input
+                  id="dest"
+                  type="search"
+                  placeholder="Where are you going?"
+                  autocomplete="off"
+                  spellcheck="false"
+                />
+                <button type="button" class="search__clear" id="dest-clear" hidden aria-label="Clear destination">
+                  <svg class="ui-icon-xs"><use href="#icon-cross"></use></svg>
+                </button>
+                <ul id="dest-results" class="results" hidden></ul>
+              </div>
+            </section>
+          </div>
 
           <section class="field">
-            <div class="search">
-              <input
-                id="dest"
-                type="search"
-                placeholder="Where are you going?"
-                autocomplete="off"
-                spellcheck="false"
-              />
-              <ul id="dest-results" class="results" hidden></ul>
-            </div>
-          </section>
-
-          <section class="field">
-            <label class="toggle">
+            <label class="toggle toggle--accessibility">
               <input type="checkbox" id="step-free" />
-              <span>Step-free route (avoid stairs / elevator only)</span>
+              <span class="toggle__track"><span class="toggle__thumb"></span></span>
+              <span class="toggle__text">
+                <svg class="ui-icon-sm" aria-hidden="true"><use href="#icon-wheelchair"></use></svg>
+                Step-free route (lifts only)
+              </span>
             </label>
           </section>
 
@@ -207,24 +384,49 @@
         </footer>
       </aside>
 
+      <!-- Polished Room Info Card -->
       <div class="info" id="info" hidden>
         <button class="info__close" id="info-close" aria-label="Close">&times;</button>
+        <div class="info__header">
+          <span class="info__badge" id="info-badge">Room</span>
+          <span class="info__code" id="info-code" hidden></span>
+        </div>
+        <h2 class="info__name" id="info-name"></h2>
         <p class="info__eyebrow" id="info-where"></p>
-        <h2 id="info-name"></h2>
-        <p class="info__code" id="info-code" hidden></p>
-        <dl class="info__meta">
-          <div><dt>Type</dt><dd id="info-type"></dd></div>
-          <div><dt>Floor area</dt><dd id="info-area"></dd></div>
-        </dl>
-        <button class="info__focus" id="info-focus">Zoom to room</button>
-        <button class="info__directions" id="info-directions">
-          <span class="info__directions-icon">→</span>Directions to here
-        </button>
+
+        <div class="info__stats">
+          <div class="stat-pill">
+            <span class="stat-label">Area</span>
+            <strong class="stat-val" id="info-area">0 m²</strong>
+          </div>
+          <div class="stat-pill">
+            <span class="stat-label">Category</span>
+            <strong class="stat-val" id="info-type">-</strong>
+          </div>
+        </div>
+
+        <div class="info__actions">
+          <button class="info__directions" id="info-directions">
+            <svg class="btn-icon" aria-hidden="true"><use href="#icon-compass"></use></svg>
+            Directions to here
+          </button>
+          <div class="info__btn-row">
+            <button class="info__focus" id="info-focus">
+              <svg class="btn-icon" aria-hidden="true"><use href="#icon-fit"></use></svg>
+              Zoom in
+            </button>
+            <button class="info__share" id="info-share" title="Copy room link">
+              <svg class="btn-icon" aria-hidden="true"><use href="#icon-share"></use></svg>
+              <span id="share-text">Share</span>
+            </button>
+          </div>
+        </div>
       </div>
 
       <div class="tooltip" id="tooltip" hidden></div>
+      <div class="toast" id="toast" hidden></div>
 
-      <div class="loading" id="loading"><span></span>Building model…</div>
+      <div class="loading" id="loading"><span></span>Building 3D Model…</div>
     </div>
 
     <script type="module" src="/src/main.js"></script>

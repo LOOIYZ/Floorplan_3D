@@ -23,8 +23,8 @@ renderer.toneMappingExposure = 1.08;
 const labelRenderer = new CSS2DRenderer({ element: labelLayer });
 
 const scene = new THREE.Scene();
-scene.background = new THREE.Color(0xf6f5f1);
-scene.fog = new THREE.Fog(0xf6f5f1, 190, 560);
+scene.background = new THREE.Color(0xf8f9fa);
+scene.fog = new THREE.Fog(0xf8f9fa, 190, 560);
 
 const camera = new THREE.PerspectiveCamera(42, 1, 0.5, 1200);
 camera.position.set(46, 52, 74);
@@ -77,7 +77,7 @@ shadowCatcher.rotation.x = -Math.PI / 2;
 shadowCatcher.receiveShadow = true;
 scene.add(shadowCatcher);
 
-const grid = new THREE.GridHelper(400, 80, 0x1b2a4a, 0x1b2a4a);
+const grid = new THREE.GridHelper(400, 80, 0x152238, 0x152238);
 grid.material.transparent = true;
 grid.material.opacity = 0.05;
 scene.add(grid);
@@ -88,8 +88,9 @@ const state = {
   mode: 'explode',
   spread: 0.45,
   activeLevel: campus.levels[1].key,
+  activeLevels: new Set(campus.levels.map((l) => l.key)),
   hiddenLevels: new Set(),
-  hiddenCategories: new Set(),
+  selectedCategories: new Set(),
   labels: true,
   walls: true,
   topDown: false,
@@ -143,8 +144,13 @@ function applyLayout() {
       ? state.activeLevel === 'A2' || state.activeLevel === 'B3'
       : !state.hiddenLevels.has('A2') && !state.hiddenLevels.has('B3');
 
+  const isCatFiltered = state.selectedCategories.size > 0;
   for (const room of campus.rooms) {
-    room.group.visible = !state.hiddenCategories.has(room.category);
+    const isCatVisible =
+      !isCatFiltered ||
+      state.selectedCategories.has(room.category) ||
+      (state.selected && state.selected.code === room.code);
+    room.group.visible = isCatVisible;
     if (room.walls) room.walls.visible = state.walls;
   }
 
@@ -170,12 +176,14 @@ function updateShadowCatcher() {
 const box = new THREE.Box3();
 const sphere = new THREE.Sphere();
 
-/** Gets the amount of screen space (in pixels) taken up by the panel. */
+/** Gets screen space (px) occupied by the panel. */
 function getPanelOcclusion() {
   if (currentTab === 'home') {
     return { left: 0, bottom: 0 };
   }
-  const rect = document.querySelector('.panel').getBoundingClientRect();
+  const panelEl = document.querySelector('.panel');
+  if (!panelEl) return { left: 0, bottom: 0 };
+  const rect = panelEl.getBoundingClientRect();
   if (window.innerWidth <= 768) {
     return { left: 0, bottom: window.innerHeight - rect.top + 10 };
   } else {
@@ -194,7 +202,7 @@ function visibleBounds() {
   return box;
 }
 
-/** Distance at which a sphere of `radius` fits in the usable area. */
+/** Distance at which a sphere of `radius` fits comfortably. */
 function distanceFor(radius) {
   const occ = getPanelOcclusion();
   const usableW = Math.max(260, window.innerWidth - occ.left - 40);
@@ -204,25 +212,22 @@ function distanceFor(radius) {
   return radius / Math.sin(Math.min(fovV, fovH) / 2);
 }
 
-/**
- * Nudges camera and target so the model is centred in the usable space.
- */
 function offsetForPanel(position, target, dist) {
   const occ = getPanelOcclusion();
   const worldPerPx =
     (2 * dist * Math.tan(THREE.MathUtils.degToRad(camera.fov) / 2)) / window.innerHeight;
-  
+
   const shiftX = (occ.left / 2) * worldPerPx;
   const shiftY = (occ.bottom / 2) * worldPerPx;
-  
+
   const forward = target.clone().sub(position).normalize();
-  const right = new THREE.Vector3().crossVectors(forward, camera.up).normalize();
+  let right = new THREE.Vector3().crossVectors(forward, camera.up).normalize();
   if (right.lengthSq() < 1e-6) right.set(1, 0, 0);
   const up = new THREE.Vector3().crossVectors(right, forward).normalize();
 
   position.addScaledVector(right, -shiftX);
   target.addScaledVector(right, -shiftX);
-  
+
   position.addScaledVector(up, -shiftY);
   target.addScaledVector(up, -shiftY);
 }
@@ -230,8 +235,6 @@ function offsetForPanel(position, target, dist) {
 function frameSphere(source, padding, duration) {
   const dist = distanceFor(source.radius * padding);
   const centre = source.center.clone();
-  // A pure (0,1,0) direction leaves the orbit azimuth undefined, so keep a
-  // sliver of +Z to guarantee north stays at the top of the screen.
   const dir = state.topDown
     ? new THREE.Vector3(0, 1, 0.002).normalize()
     : new THREE.Vector3(0.34, 0.6, 0.72).normalize();
@@ -244,7 +247,6 @@ function frameAll(duration = 0.9) {
   frameSphere(visibleBounds().getBoundingSphere(sphere), 0.82, duration);
 }
 
-/** Frames an arbitrary set of scene-space points, used for routes. */
 function framePoints(points, duration = 0.9) {
   if (points.length < 2) return;
   box.makeEmpty();
@@ -289,11 +291,18 @@ function select(room, { fly = false } = {}) {
   state.selected = room;
   if (!room) {
     infoCard.hidden = true;
+    updateLabels();
     return;
+  }
+  state.activeLevel = room.levelKey;
+  if (room.levelKey && state.activeLevels) {
+    state.activeLevels.add(room.levelKey);
   }
   paint(room, 'selected');
   showInfo(room);
   if (fly) focusRoom(room);
+  renderLevelList();
+  updateLabels();
 }
 
 function hover(room) {
@@ -304,7 +313,7 @@ function hover(room) {
 
   if (room) {
     tooltip.hidden = false;
-    tooltip.innerHTML = `${room.name}${room.code ? `<small>${room.code}</small>` : ''}`;
+    tooltip.innerHTML = `${escapeHtml(room.name)}${room.code ? `<small>${escapeHtml(room.code)}</small>` : ''}`;
   } else {
     tooltip.hidden = true;
   }
@@ -342,11 +351,6 @@ function isRoomVisible(room) {
   return true;
 }
 
-/**
- * Levels the user can actually see the inside of. In stacked mode only the top
- * visible level of each block qualifies — everything below is roofed over, so
- * labelling or picking it would be misleading.
- */
 function readableLevels() {
   const keys = new Set();
   if (state.mode === 'stack') {
@@ -409,9 +413,38 @@ canvas.addEventListener('dblclick', (event) => {
 
 const infoCard = document.getElementById('info');
 const tooltip = document.getElementById('tooltip');
+const toastEl = document.getElementById('toast');
 const levelList = document.getElementById('levels');
 const legendList = document.getElementById('legend');
 const spreadField = document.getElementById('spread-field');
+const spreadVal = document.getElementById('spread-val');
+const viewportHud = document.getElementById('viewport-hud');
+const compassNeedle = document.getElementById('compass-needle');
+const compassBtn = document.getElementById('compass-btn');
+
+function showToast(msg) {
+  if (!toastEl) return;
+  toastEl.textContent = msg;
+  toastEl.hidden = false;
+  clearTimeout(toastEl._timer);
+  toastEl._timer = setTimeout(() => {
+    toastEl.hidden = true;
+  }, 2200);
+}
+
+function escapeHtml(str) {
+  return String(str)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;');
+}
+
+function highlightMatch(text, query) {
+  if (!query) return escapeHtml(text);
+  const escaped = query.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const regex = new RegExp(`(${escaped})`, 'gi');
+  return escapeHtml(text).replace(regex, '<span class="highlight">$1</span>');
+}
 
 // ---------------------------------------------------------------- tabs & navigation
 
@@ -430,14 +463,22 @@ function switchTab(name) {
   if (name === 'home') {
     if (homeScreen) homeScreen.classList.remove('is-hidden');
     if (mainPanel) mainPanel.classList.add('is-hidden');
+    if (viewportHud) viewportHud.hidden = true;
     if (labelLayer) labelLayer.style.display = 'none';
   } else {
     if (homeScreen) homeScreen.classList.add('is-hidden');
     if (mainPanel) mainPanel.classList.remove('is-hidden');
+    if (viewportHud) viewportHud.hidden = false;
     if (labelLayer) labelLayer.style.display = state.labels ? '' : 'none';
 
-    if (navBtnExplore) navBtnExplore.classList.toggle('is-active', name === 'explore');
-    if (navBtnDirections) navBtnDirections.classList.toggle('is-active', name === 'directions');
+    if (navBtnExplore) {
+      navBtnExplore.classList.toggle('is-active', name === 'explore');
+      navBtnExplore.setAttribute('aria-selected', name === 'explore');
+    }
+    if (navBtnDirections) {
+      navBtnDirections.classList.toggle('is-active', name === 'directions');
+      navBtnDirections.setAttribute('aria-selected', name === 'directions');
+    }
 
     if (tabExplore) tabExplore.hidden = name !== 'explore';
     if (tabDirections) tabDirections.hidden = name !== 'directions';
@@ -448,6 +489,18 @@ function switchTab(name) {
       entering.classList.remove('is-entering');
       void entering.offsetWidth; // force reflow
       entering.classList.add('is-entering');
+    }
+
+    // Reset route floor isolation when user explicitly switches back to Explore
+    if (name === 'explore' && state.routeLevelKeys) {
+      state.routeLevelKeys = null;
+      state.hiddenLevels.clear();
+      state.activeLevels = new Set(campus.levels.map((l) => l.key));
+      applyLayout();
+      renderLevelList();
+      updateLabels();
+    } else if (name === 'directions' && directions.hasRoute()) {
+      directions.refresh();
     }
 
     // Refocus camera for panel layout
@@ -469,26 +522,88 @@ document.getElementById('explore-bottom-home')?.addEventListener('click', () => 
 navBtnExplore?.addEventListener('click', () => switchTab('explore'));
 navBtnDirections?.addEventListener('click', () => switchTab('directions'));
 
+// ---------------------------------------------------------------- viewport HUD controls
+
+// North Compass: smoothly reset camera azimuth to face North
+compassBtn?.addEventListener('click', () => {
+  const radius = camera.position.distanceTo(controls.target);
+  const polar = Math.max(0.15, controls.getPolarAngle());
+  const target = controls.target.clone();
+  const dir = state.topDown
+    ? new THREE.Vector3(0, 1, 0.002).normalize()
+    : new THREE.Vector3(0, Math.cos(polar), Math.sin(polar)).normalize();
+  const position = target.clone().addScaledVector(dir, radius);
+  offsetForPanel(position, target, radius);
+  flyTo(position, target, 0.7);
+});
+
+// Camera Presets
+document.getElementById('preset-iso')?.addEventListener('click', () => {
+  state.topDown = false;
+  const toggleTop = document.getElementById('toggle-top');
+  if (toggleTop) toggleTop.checked = false;
+  controls.maxPolarAngle = Math.PI * 0.495;
+  controls.minPolarAngle = 0;
+  frameAll(0.7);
+});
+
+document.getElementById('preset-top')?.addEventListener('click', () => {
+  state.topDown = true;
+  const toggleTop = document.getElementById('toggle-top');
+  if (toggleTop) toggleTop.checked = true;
+  controls.maxPolarAngle = 0.02;
+  controls.minPolarAngle = 0;
+  frameAll(0.7);
+});
+
+document.getElementById('preset-fit')?.addEventListener('click', () => {
+  frameAll(0.7);
+});
+
+// ---------------------------------------------------------------- room info card
+
 function showInfo(room) {
   infoCard.hidden = false;
   document.getElementById('info-where').textContent =
     `${room.building.name} · ${room.level.name}`;
   document.getElementById('info-name').textContent = room.name;
+
   const codeEl = document.getElementById('info-code');
   codeEl.hidden = !room.code;
   codeEl.textContent = room.code ?? '';
+
+  const badgeEl = document.getElementById('info-badge');
+  if (badgeEl) badgeEl.textContent = CATEGORIES[room.category]?.label ?? 'Room';
+
   document.getElementById('info-type').textContent = CATEGORIES[room.category].label;
   document.getElementById('info-area').textContent = `${Math.round(room.area)} m²`;
 }
 
-document.getElementById('info-close').addEventListener('click', () => select(null));
-document.getElementById('info-focus').addEventListener('click', () => {
+document.getElementById('info-close')?.addEventListener('click', () => select(null));
+document.getElementById('info-focus')?.addEventListener('click', () => {
   if (state.selected) focusRoom(state.selected);
+});
+
+// Share room location via link
+document.getElementById('info-share')?.addEventListener('click', () => {
+  if (!state.selected) return;
+  const code = state.selected.code || state.selected.name;
+  const url = new URL(window.location.href);
+  url.hash = `room=${encodeURIComponent(code)}`;
+  if (navigator.clipboard) {
+    navigator.clipboard.writeText(url.toString()).then(() => {
+      showToast('✓ Link copied to clipboard!');
+    }).catch(() => {
+      showToast(`Location: ${code}`);
+    });
+  } else {
+    showToast(`Location: ${code}`);
+  }
 });
 
 // View mode -------------------------------------------------------
 
-document.getElementById('view-mode').addEventListener('click', (event) => {
+document.getElementById('view-mode')?.addEventListener('click', (event) => {
   const button = event.target.closest('button[data-mode]');
   if (!button) return;
   setMode(button.dataset.mode);
@@ -496,8 +611,10 @@ document.getElementById('view-mode').addEventListener('click', (event) => {
   frameAll();
 });
 
-document.getElementById('spread').addEventListener('input', (event) => {
-  state.spread = Number(event.target.value) / 100;
+document.getElementById('spread')?.addEventListener('input', (event) => {
+  const val = Number(event.target.value);
+  state.spread = val / 100;
+  if (spreadVal) spreadVal.textContent = `${val}%`;
   applyLayout();
 });
 
@@ -509,9 +626,35 @@ function renderLevelList() {
   for (const level of campus.levels) {
     if (level.building.id !== currentBuilding) {
       currentBuilding = level.building.id;
+      const bId = level.building.id;
+      const buildingLevels = campus.levels.filter((l) => l.building.id === bId);
+      const allBuildingActive = buildingLevels.every((l) => state.activeLevels?.has(l.key));
+
       const heading = document.createElement('div');
       heading.className = 'levels__group';
-      heading.textContent = level.building.name;
+      heading.innerHTML =
+        `<span>${escapeHtml(level.building.name)}</span>` +
+        `<button type="button" class="levels__group-toggle" title="Toggle all floors for ${escapeHtml(level.building.name)}">` +
+        `${allBuildingActive ? 'Deactivate All' : 'Activate All'}` +
+        `</button>`;
+
+      heading.querySelector('.levels__group-toggle')?.addEventListener('click', (e) => {
+        e.stopPropagation();
+        if (allBuildingActive) {
+          for (const l of buildingLevels) {
+            state.activeLevels.delete(l.key);
+          }
+        } else {
+          for (const l of buildingLevels) {
+            state.activeLevels.add(l.key);
+            state.hiddenLevels.delete(l.key);
+          }
+        }
+        renderLevelList();
+        applyLayout();
+        updateLabels();
+      });
+
       levelList.append(heading);
     }
     const button = document.createElement('button');
@@ -519,23 +662,65 @@ function renderLevelList() {
       state.mode === 'single'
         ? level.key === state.activeLevel
         : !state.hiddenLevels.has(level.key);
-    button.className = on ? 'is-on' : 'is-off';
+    const isTarget = Boolean(on && state.activeLevels?.has(level.key));
+    button.className = (on ? 'is-on' : 'is-off') + (isTarget ? ' is-target' : '');
     button.innerHTML =
-      `<span class="swatch"></span>${level.level.name}` +
+      `<span class="swatch"></span>` +
+      `<span class="levels__name">${escapeHtml(level.level.name)}</span>` +
+      (isTarget ? `<span class="levels__active-pill">Active</span>` : '') +
       `<span class="count">${level.rooms.length} rooms</span>`;
     button.addEventListener('click', () => {
       if (state.mode === 'single') {
         if (level.key === state.activeLevel) return;
         state.activeLevel = level.key;
+        state.activeLevels.clear();
+        state.activeLevels.add(level.key);
         applyLayout();
         frameAll(0.6);
         return;
       }
-      if (state.hiddenLevels.has(level.key)) state.hiddenLevels.delete(level.key);
-      else state.hiddenLevels.add(level.key);
+      // Toggle this level active or inactive
+      if (state.activeLevels.has(level.key)) {
+        state.activeLevels.delete(level.key);
+        if (state.activeLevel === level.key) {
+          state.activeLevel = Array.from(state.activeLevels)[0] || null;
+        }
+      } else {
+        if (state.hiddenLevels.has(level.key)) {
+          state.hiddenLevels.delete(level.key);
+        }
+        state.activeLevels.add(level.key);
+        state.activeLevel = level.key;
+      }
       applyLayout();
+      updateLabels();
     });
     levelList.append(button);
+  }
+
+  // Sync Animated Toggle Switch state for Activate / Deactivate All
+  const toggleLevels = document.getElementById('toggle-levels-all');
+  const toggleStatus = document.getElementById('toggle-levels-all-status');
+  const toggleWrapper = document.getElementById('toggle-levels-all-label');
+  if (toggleLevels) {
+    const totalLevels = campus.levels.length;
+    const activeCount = state.activeLevels.size;
+    const hasAnyActive = activeCount > 0;
+    const isAllActive = activeCount === totalLevels;
+
+    toggleLevels.checked = hasAnyActive;
+    if (toggleStatus) {
+      if (isAllActive) {
+        toggleStatus.textContent = 'All Active';
+      } else if (hasAnyActive) {
+        toggleStatus.textContent = `${activeCount} Active`;
+      } else {
+        toggleStatus.textContent = 'Inactive';
+      }
+    }
+    if (toggleWrapper) {
+      toggleWrapper.classList.toggle('is-active', hasAnyActive);
+    }
   }
 }
 
@@ -547,45 +732,97 @@ function renderLegend() {
   for (const room of campus.rooms) {
     counts.set(room.category, (counts.get(room.category) ?? 0) + 1);
   }
+  const isFiltered = state.selectedCategories.size > 0;
   for (const [key, meta] of Object.entries(CATEGORIES)) {
     const li = document.createElement('li');
-    li.className = state.hiddenCategories.has(key) ? 'is-off' : '';
+    const isSelected = isFiltered && state.selectedCategories.has(key);
+    li.className = isFiltered ? (isSelected ? 'is-active' : 'is-off') : '';
     li.innerHTML =
       `<span class="chip" style="background:#${meta.color
         .toString(16)
         .padStart(6, '0')}"></span>` +
-      `${meta.label}<span class="count">${counts.get(key) ?? 0}</span>`;
-    li.title = 'Click to show or hide';
+      `${escapeHtml(meta.label)}<span class="count">${counts.get(key) ?? 0}</span>`;
+    li.title = isSelected
+      ? `Click to deselect ${meta.label}`
+      : `Click to show only ${meta.label}`;
     li.addEventListener('click', () => {
-      if (state.hiddenCategories.has(key)) state.hiddenCategories.delete(key);
-      else state.hiddenCategories.add(key);
+      if (state.selectedCategories.size === 0) {
+        // Click to show: isolate to this category
+        state.selectedCategories.add(key);
+      } else if (state.selectedCategories.has(key)) {
+        // Toggle off if already selected
+        state.selectedCategories.delete(key);
+      } else {
+        // Add to selected visible categories
+        state.selectedCategories.add(key);
+      }
+      // If all categories are selected, return to default (show all)
+      if (state.selectedCategories.size === Object.keys(CATEGORIES).length) {
+        state.selectedCategories.clear();
+      }
       renderLegend();
       applyLayout();
+      updateLabels();
     });
     legendList.append(li);
   }
+
+  // Update Show All button state
+  const showAllBtn = document.getElementById('btn-show-all-categories');
+  if (showAllBtn) {
+    showAllBtn.disabled = !isFiltered;
+    showAllBtn.classList.toggle('is-disabled', !isFiltered);
+  }
 }
+
+// Show All Categories button
+document.getElementById('btn-show-all-categories')?.addEventListener('click', () => {
+  state.selectedCategories.clear();
+  renderLegend();
+  applyLayout();
+  updateLabels();
+});
+
+// Animated Toggle Switch to Activate / Deactivate All Floors for Whole Building
+document.getElementById('toggle-levels-all')?.addEventListener('change', (event) => {
+  const activate = event.target.checked;
+  if (!activate) {
+    // Deactivate all floors
+    state.activeLevels.clear();
+    state.activeLevel = null;
+  } else {
+    // Activate ALL the floors for whole building
+    for (const l of campus.levels) {
+      state.activeLevels.add(l.key);
+      state.hiddenLevels.delete(l.key);
+    }
+    state.activeLevel = campus.levels[1].key;
+  }
+  renderLevelList();
+  applyLayout();
+  updateLabels();
+});
 
 // Toggles ---------------------------------------------------------
 
-document.getElementById('toggle-labels').addEventListener('change', (event) => {
+document.getElementById('toggle-labels')?.addEventListener('change', (event) => {
   state.labels = event.target.checked;
   labelLayer.style.display = state.labels ? '' : 'none';
 });
 
-document.getElementById('toggle-walls').addEventListener('change', (event) => {
+document.getElementById('toggle-walls')?.addEventListener('change', (event) => {
   state.walls = event.target.checked;
   applyLayout();
 });
 
-document.getElementById('toggle-top').addEventListener('change', (event) => {
+document.getElementById('toggle-top')?.addEventListener('change', (event) => {
   state.topDown = event.target.checked;
   controls.maxPolarAngle = state.topDown ? 0.02 : Math.PI * 0.495;
   controls.minPolarAngle = state.topDown ? 0 : 0;
   frameAll(0.7);
 });
 
-document.getElementById('toggle-shadows').addEventListener('change', (event) => {
+document.getElementById('toggle-shadows')?.addEventListener('change', (event) => {
   state.shadows = event.target.checked;
   renderer.shadowMap.enabled = state.shadows;
   sun.castShadow = state.shadows;
@@ -599,11 +836,12 @@ document.getElementById('toggle-shadows').addEventListener('change', (event) => 
 
 const searchIndex = campus.rooms.map((room) => ({
   room,
-  haystack: `${room.name} ${room.code ?? ''} ${room.building.name} ${room.level.name}`.toLowerCase(),
+  haystack: `${room.name} ${room.code ?? ''} ${room.note ?? ''} ${room.building.name} ${room.level.name}`.toLowerCase(),
 }));
 
 const homeSearchInput = document.getElementById('home-search');
 const homeResultsList = document.getElementById('home-results');
+const homeSearchClear = document.getElementById('home-search-clear');
 
 function attachRoomSearch(inputEl, resultsEl, onSelect) {
   if (!inputEl || !resultsEl) return;
@@ -624,33 +862,41 @@ function attachRoomSearch(inputEl, resultsEl, onSelect) {
     if (!matches.length) {
       const li = document.createElement('li');
       li.className = 'empty';
-      li.textContent = 'No rooms found';
+      li.innerHTML =
+        `<span class="empty-icon">🔍</span>` +
+        `<span>No rooms matching "<strong>${escapeHtml(q)}</strong>"</span>` +
+        `<span style="font-size:11px;opacity:0.8;">Try searching for MM2, Surau, or CCNA</span>`;
       resultsEl.append(li);
       return;
     }
 
     for (const { room } of matches) {
       const li = document.createElement('li');
+      const dotColor = (CATEGORIES[room.category]?.color ?? 0x152238).toString(16).padStart(6, '0');
+      const highlightedName = highlightMatch(room.name, q);
+      const codeHtml = room.code ? `<span class="code-pill">${escapeHtml(room.code)}</span>` : '';
+
       li.innerHTML =
-        `<span class="dot" style="background:#${CATEGORIES[room.category].color
-          .toString(16)
-          .padStart(6, '0')}"></span>` +
-        `<span>${room.name}${room.code ? ` (${room.code})` : ''}</span>` +
-        `<span class="where">${room.building.name.replace('Block ', '')} · ${room.level.name.replace(
-          'Level ',
-          'L',
-        )}</span>`;
+        `<span class="dot" style="background:#${dotColor}"></span>` +
+        `<span class="name">${highlightedName}</span>` +
+        codeHtml +
+        `<span class="where">${room.building.name.replace('Block ', '')} · ${room.level.name.replace('Level ', 'L')}</span>`;
+
       li.addEventListener('click', () => {
         revealRoom(room);
         resultsEl.hidden = true;
         inputEl.value = room.code ? `${room.name} (${room.code})` : room.name;
+        if (homeSearchClear) homeSearchClear.hidden = false;
         if (onSelect) onSelect(room);
       });
       resultsEl.append(li);
     }
   }
 
-  inputEl.addEventListener('input', (e) => performSearch(e.target.value));
+  inputEl.addEventListener('input', (e) => {
+    performSearch(e.target.value);
+    if (homeSearchClear) homeSearchClear.hidden = !e.target.value;
+  });
   inputEl.addEventListener('focus', (e) => performSearch(e.target.value));
   inputEl.addEventListener('keydown', (e) => {
     if (e.key === 'Escape') {
@@ -667,6 +913,15 @@ function attachRoomSearch(inputEl, resultsEl, onSelect) {
 // Attach home search (auto-switches to explore view on select)
 attachRoomSearch(homeSearchInput, homeResultsList, () => {
   switchTab('explore');
+});
+
+homeSearchClear?.addEventListener('click', () => {
+  if (homeSearchInput) {
+    homeSearchInput.value = '';
+    homeSearchInput.focus();
+  }
+  if (homeResultsList) homeResultsList.hidden = true;
+  homeSearchClear.hidden = true;
 });
 
 // Attach popular destination chips on Home
@@ -687,6 +942,23 @@ document.addEventListener('click', (event) => {
   }
 });
 
+// Global keyboard shortcut: Ctrl+K / Cmd+K focuses search
+window.addEventListener('keydown', (e) => {
+  if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') {
+    e.preventDefault();
+    if (currentTab === 'home') {
+      homeSearchInput?.focus();
+      homeSearchInput?.select();
+    } else {
+      const input = currentTab === 'directions'
+        ? (document.getElementById('dest') || document.getElementById('origin'))
+        : homeSearchInput;
+      input?.focus();
+      input?.select();
+    }
+  }
+});
+
 function setMode(mode) {
   state.mode = mode;
   for (const button of document.querySelectorAll('#view-mode button')) {
@@ -699,8 +971,10 @@ function revealRoom(room) {
   state.hiddenCategories.delete(room.category);
   state.hiddenLevels.delete(room.levelKey);
   state.activeLevel = room.levelKey;
+  if (room.building && state.activeLevels) {
+    state.activeLevels[room.building.id] = room.levelKey;
+  }
 
-  // A room buried under the floors above it can't be seen in stacked mode.
   if (state.mode === 'stack') {
     applyLayout();
     if (!readable.has(room.levelKey)) setMode('single');
@@ -719,17 +993,38 @@ window.addEventListener('keydown', (event) => {
 
 // ---------------------------------------------------------------- declutter
 
-/**
- * Screen-space declutter: project every room label, then keep the important
- * ones (selected, then largest, then nearest) and drop any that would overlap
- * something already placed or fall behind the panel.
- */
+const CATEGORY_PRIORITY = {
+  teaching: 60, // Dewan Kuliah, Bilik Kuliah, Seminar
+  lab: 50,      // Makmal Mikro, CCNA
+  social: 40,   // The Cube, Lounge
+  office: 30,   // Lecturer's Room, Office
+  amenity: 20,  // Surau, Toilet
+  circulation: 10, // Main Entrance, Foyer, Lobby, Stairs
+  service: 5,
+};
+
 const projected = new THREE.Vector3();
-let labelTick = 0;
+
+function getTargetLevels() {
+  const targets = new Set();
+  if (state.activeLevels instanceof Set) {
+    for (const level of campus.levels) {
+      if (state.activeLevels.has(level.key) && !state.hiddenLevels.has(level.key)) {
+        targets.add(level.key);
+      }
+    }
+  }
+  return targets;
+}
 
 function updateLabels() {
-  if (!state.labels) return;
-  if (labelTick++ % 3 !== 0) return;
+  if (!state.labels) {
+    for (const room of campus.rooms) {
+      room.label.visible = false;
+      if (room.label.element) room.label.element.style.display = 'none';
+    }
+    return;
+  }
 
   const width = window.innerWidth;
   const height = window.innerHeight;
@@ -737,63 +1032,132 @@ function updateLabels() {
   const bottomEdge = getPanelOcclusion().bottom;
   const candidates = [];
 
+  // Detect if camera is looking from top-down or elevated overhead angle
+  const polar = controls.getPolarAngle();
+  const isTopView = state.topDown || polar < 1.05;
+
+  // In top-down / elevated view with exploded floors, multiple floors project to overlapping screen areas.
+  // We prioritize the target level for each building (Block A & Block B) so floors don't stack illegibly.
+  const targetLevels = getTargetLevels();
+
   for (const room of campus.rooms) {
     if (!isRoomReadable(room)) {
       room.label.visible = false;
+      if (room.label.element) room.label.element.style.display = 'none';
       continue;
     }
-    projected.copy(room.labelPoint);
-    room.group.localToWorld(projected);
+
+    // Option 1: Per-Building Active Floor Filtering
+    // Only show room labels on each building's active focus level to eliminate cross-floor overlap
+    if (state.mode === 'explode') {
+      const isTargetLevel = targetLevels.has(room.levelKey);
+      if (!isTargetLevel && room !== state.selected) {
+        room.label.visible = false;
+        if (room.label.element) room.label.element.style.display = 'none';
+        continue;
+      }
+    }
+
+    room.label.getWorldPosition(projected);
     projected.project(camera);
     if (projected.z < -1 || projected.z > 1) {
       room.label.visible = false;
+      if (room.label.element) room.label.element.style.display = 'none';
       continue;
     }
     const x = (projected.x * 0.5 + 0.5) * width;
     const y = (-projected.y * 0.5 + 0.5) * height;
     if (x < leftEdge || x > width - 10 || y < 10 || y > height - bottomEdge - 10) {
       room.label.visible = false;
+      if (room.label.element) room.label.element.style.display = 'none';
       continue;
     }
     candidates.push({ room, x, y, depth: projected.z });
   }
 
   candidates.sort((a, b) => {
-    const aSel = a.room === state.selected;
-    const bSel = b.room === state.selected;
-    if (aSel !== bSel) return aSel ? -1 : 1;
+    // 1. Selected room or route endpoints (origin/destination) always have absolute priority
+    const aEndpoint = a.room === state.selected || Boolean(state.routeEndpoints?.has(a.room.code));
+    const bEndpoint = b.room === state.selected || Boolean(state.routeEndpoints?.has(b.room.code));
+    if (aEndpoint !== bEndpoint) return aEndpoint ? -1 : 1;
+
+    // 2. Active / target level priority per building
+    const aTarget = targetLevels.has(a.room.levelKey);
+    const bTarget = targetLevels.has(b.room.levelKey);
+    if (aTarget !== bTarget) return aTarget ? -1 : 1;
+
+    // 3. Higher floors appear over lower floors
+    if (a.room.level.rank !== b.room.level.rank) {
+      return b.room.level.rank - a.room.level.rank;
+    }
+
+    // 4. Room category priority (e.g. labs and lecture halls over stairs and toilets)
+    const aPrio = CATEGORY_PRIORITY[a.room.category] ?? 0;
+    const bPrio = CATEGORY_PRIORITY[b.room.category] ?? 0;
+    if (aPrio !== bPrio) return bPrio - aPrio;
+
+    // 5. Room area as tie-breaker
     return b.room.area - a.room.area || a.depth - b.depth;
   });
 
-  // Treat the info card as already occupied so labels never hide behind it.
   const placed = [];
   if (!infoCard.hidden) {
     const card = infoCard.getBoundingClientRect();
     placed.push({
-      x0: card.left - 8,
-      x1: card.right + 8,
-      y0: card.top - 8,
-      y1: card.bottom + 8,
+      x0: card.left - 12,
+      x1: card.right + 12,
+      y0: card.top - 12,
+      y1: card.bottom + 12,
     });
   }
 
   for (const item of candidates) {
     const el = item.room.label.element;
-    if (el.offsetWidth) item.room.labelSize = [el.offsetWidth, el.offsetHeight];
-    const [w, h] = item.room.labelSize ?? [72, 18];
+    let w = el && el.offsetWidth > 0 ? el.offsetWidth : 0;
+    let h = el && el.offsetHeight > 0 ? el.offsetHeight : 0;
+
+    if (!w || !h) {
+      if (item.room.labelSize && item.room.labelSize[0] > 0) {
+        [w, h] = item.room.labelSize;
+      } else {
+        const nameLen = item.room.name ? item.room.name.length : 0;
+        const codeLen = item.room.code ? item.room.code.length : 0;
+        w = Math.max(90, Math.max(nameLen * 8, codeLen * 10) + 26);
+        h = item.room.code ? 38 : 26;
+        item.room.labelSize = [w, h];
+      }
+    } else {
+      item.room.labelSize = [w, h];
+    }
+
+    // Generous collision margins so labels never touch or overlap
+    const padX = isTopView ? 12 : 8;
+    const padY = isTopView ? 8 : 6;
     const rect = {
-      x0: item.x - w / 2 - 3,
-      x1: item.x + w / 2 + 3,
-      y0: item.y - h / 2 - 2,
-      y1: item.y + h / 2 + 2,
+      x0: item.x - w / 2 - padX,
+      x1: item.x + w / 2 + padX,
+      y0: item.y - h / 2 - padY,
+      y1: item.y + h / 2 + padY,
     };
+
+    const isEndpoint = Boolean(state.routeEndpoints?.has(item.room.code));
     const clashes =
       item.room !== state.selected &&
+      !isEndpoint &&
       placed.some((p) => p.x0 < rect.x1 && p.x1 > rect.x0 && p.y0 < rect.y1 && p.y1 > rect.y0);
+
     item.room.label.visible = !clashes;
+    if (el) {
+      el.style.display = clashes ? 'none' : '';
+    }
     if (!clashes) placed.push(rect);
   }
 }
+
+// Update labels smoothly during camera controls
+controls.addEventListener('change', () => {
+  updateLabels();
+});
 
 // ---------------------------------------------------------------- loop
 
@@ -830,12 +1194,17 @@ function animate() {
   renderer.render(scene, camera);
   if (state.labels) labelRenderer.render(scene, camera);
 
+  // Sync North Compass needle with camera azimuth
+  if (compassNeedle) {
+    const azimuth = controls.getAzimuthalAngle();
+    compassNeedle.style.transform = `rotate(${azimuth}rad)`;
+  }
+
   requestAnimationFrame(animate);
 }
 
 // ---------------------------------------------------------------- helpers
 
-/** Y position (in scene units) of the lowest visible floor slab. */
 function groundElevation() {
   let lowest = Infinity;
   for (const level of campus.levels) {
@@ -854,17 +1223,57 @@ const directions = setupDirections({
   routeLayer,
   groundElevation,
   onRouteShown(route, { frame }) {
-    // Make all levels used by the route visible.
-    const routeLevels = new Set(route.path.map((node) => node.levelKey));
-    for (const key of routeLevels) {
-      state.hiddenLevels.delete(key);
+    // Extract every unique floor level that this route passes through
+    const routeLevels = new Set(route.path.map((node) => node.levelKey).filter(Boolean));
+    if (routeLevels.size === 0) return;
+
+    // Track active route levels
+    state.routeLevelKeys = routeLevels;
+
+    // ONLY show the floors that the user will walk by:
+    // Hide all floors NOT on the route, unhide all floors ON the route
+    state.hiddenLevels.clear();
+    for (const level of campus.levels) {
+      if (!routeLevels.has(level.key)) {
+        state.hiddenLevels.add(level.key);
+      }
     }
-    // In single mode, switch to the destination level.
-    if (state.mode === 'single') {
-      const dest = route.path[route.path.length - 1];
-      state.activeLevel = dest.levelKey;
+
+    // Automatically activate the label for every floor that will be passing by
+    state.activeLevels = new Set(routeLevels);
+
+    // Automatically turn labels ON if they were toggled off
+    if (!state.labels) {
+      state.labels = true;
+      const toggleLabels = document.getElementById('toggle-labels');
+      if (toggleLabels) toggleLabels.checked = true;
+      labelLayer.style.display = '';
     }
+
+    // If the route traverses multiple floors, ensure exploded view so all passing floors are visible
+    if (routeLevels.size > 1 && state.mode === 'single') {
+      setMode('explode');
+    }
+
+    // Set activeLevel to destination level
+    const destNode = route.path[route.path.length - 1];
+    if (destNode?.levelKey) {
+      state.activeLevel = destNode.levelKey;
+    }
+
+    // Track endpoints so their room labels are guaranteed to appear
+    state.routeEndpoints = new Set();
+    const origNode = route.path[0];
+    const origRoom = campus.rooms.find((r) => r.navNode === origNode?.id);
+    const destRoom = campus.rooms.find((r) => r.navNode === destNode?.id);
+    if (origRoom?.code) state.routeEndpoints.add(origRoom.code);
+    if (destRoom?.code) state.routeEndpoints.add(destRoom.code);
+
+    // Apply layout, update level sidebar pills & toggle, and refresh labels immediately
     applyLayout();
+    renderLevelList();
+    updateLabels();
+
     if (frame) {
       const points = route.path.map((node) => {
         const level = campus.levels.find((l) => l.key === node.levelKey);
@@ -874,29 +1283,66 @@ const directions = setupDirections({
       framePoints(points, 0.9);
     }
   },
+  onRouteCleared() {
+    state.routeEndpoints = null;
+    state.routeLevelKeys = null;
+    // When directions are cleared, restore all floors visible & active
+    state.hiddenLevels.clear();
+    state.activeLevels = new Set(campus.levels.map((l) => l.key));
+    applyLayout();
+    renderLevelList();
+    updateLabels();
+    frameAll(0.8);
+  },
 });
 
 document.addEventListener('directions-restarted', () => {
   switchTab('home');
-  // Reset visibility of all categories and levels
-  state.hiddenCategories.clear();
+  state.routeEndpoints = null;
+  state.selectedCategories.clear();
   state.hiddenLevels.clear();
-  setMode('explode'); // Reset to exploded view
+  state.activeLevels = new Set(campus.levels.map((l) => l.key));
+  state.activeLevel = campus.levels[1].key;
+  setMode('explode');
   renderLegend();
+  renderLevelList();
   applyLayout();
   frameAll();
 });
 
 // "Directions to here" button in the info card
-document.getElementById('info-directions').addEventListener('click', () => {
+document.getElementById('info-directions')?.addEventListener('click', () => {
   if (!state.selected) return;
   directions.setDestination(state.selected);
   switchTab('directions');
 });
 
+// ---------------------------------------------------------------- URL hash deep link
+
+function checkUrlHash() {
+  const hash = window.location.hash;
+  if (!hash) return;
+  const match = hash.match(/room=([^&]+)/);
+  if (match) {
+    const query = decodeURIComponent(match[1]).toLowerCase();
+    const target = searchIndex.find(
+      (e) =>
+        (e.room.code && e.room.code.toLowerCase() === query) ||
+        e.room.name.toLowerCase() === query ||
+        e.haystack.includes(query)
+    );
+    if (target) {
+      setTimeout(() => {
+        switchTab('explore');
+        revealRoom(target.room);
+      }, 300);
+    }
+  }
+}
+
 // ---------------------------------------------------------------- boot
 
-document.getElementById('fit').addEventListener('click', () => frameAll());
+document.getElementById('fit')?.addEventListener('click', () => frameAll());
 scene.add(sun.target);
 
 resize();
@@ -904,6 +1350,7 @@ renderLegend();
 applyLayout();
 frameAll(0.001);
 switchTab('home');
+checkUrlHash();
 animate();
 
 const loading = document.getElementById('loading');

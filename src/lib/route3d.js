@@ -54,6 +54,22 @@ export class RouteLayer {
     this.glow.resolution.set(width, height);
   }
 
+  clearMarkers() {
+    this.markers.traverse((obj) => {
+      if (obj.isCSS2DObject && obj.element && obj.element.parentNode) {
+        obj.element.parentNode.removeChild(obj.element);
+      }
+      if (obj.geometry) obj.geometry.dispose();
+      if (obj.material) {
+        if (Array.isArray(obj.material)) obj.material.forEach((m) => m.dispose());
+        else obj.material.dispose();
+      }
+    });
+    // Safety cleanup: remove any orphaned route-marker DOM elements
+    document.querySelectorAll('.route-marker').forEach((el) => el.remove());
+    this.markers.clear();
+  }
+
   clear() {
     this.route = null;
     for (const mesh of [this.line, this.halo]) {
@@ -64,7 +80,7 @@ export class RouteLayer {
     }
     this.line = null;
     this.halo = null;
-    this.markers.clear();
+    this.clearMarkers();
     this.group.visible = false;
   }
 
@@ -107,9 +123,13 @@ export class RouteLayer {
     this.line.renderOrder = 11;
     this.group.add(this.line);
 
-    this.markers.clear();
-    this.markers.add(marker(points[0], 0x1b2a4a, startLabel, 'start'));
-    this.markers.add(marker(points[points.length - 1], 0xf4364c, endLabel, 'end'));
+    this.clearMarkers();
+    if (startLabel) {
+      this.markers.add(marker(points[0], 0x1b2a4a, startLabel, 'start'));
+    }
+    if (endLabel) {
+      this.markers.add(marker(points[points.length - 1], 0xf4364c, endLabel, 'end'));
+    }
   }
 
   /**
@@ -143,12 +163,19 @@ export class RouteLayer {
   }
 }
 
+function escapeHtml(str) {
+  return String(str)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;');
+}
+
 function marker(position, colour, label, kind) {
   const group = new THREE.Group();
   group.position.copy(position);
 
   const disc = new THREE.Mesh(
-    new THREE.CircleGeometry(20, 32),
+    new THREE.CircleGeometry(18, 32),
     new THREE.MeshBasicMaterial({
       color: colour,
       transparent: true,
@@ -163,27 +190,31 @@ function marker(position, colour, label, kind) {
   group.add(disc);
 
   const pin = new THREE.Mesh(
-    new THREE.SphereGeometry(8, 20, 14),
+    new THREE.SphereGeometry(7, 20, 14),
     new THREE.MeshBasicMaterial({ color: colour, depthTest: false, toneMapped: false }),
   );
-  pin.position.y = 22;
+  pin.position.y = 20;
   pin.renderOrder = 12;
   group.add(pin);
 
   const stem = new THREE.Mesh(
-    new THREE.CylinderGeometry(1.6, 1.6, 22, 8),
+    new THREE.CylinderGeometry(1.5, 1.5, 20, 8),
     new THREE.MeshBasicMaterial({ color: colour, depthTest: false, toneMapped: false }),
   );
-  stem.position.y = 11;
+  stem.position.y = 10;
   stem.renderOrder = 12;
   group.add(stem);
 
-  const el = document.createElement('div');
-  el.className = `route-marker route-marker--${kind}`;
-  el.textContent = label;
-  const tag = new CSS2DObject(el);
-  tag.position.y = 46;
-  group.add(tag);
+  if (label) {
+    const el = document.createElement('div');
+    el.className = `route-marker route-marker--${kind}`;
+    const badgeText = kind === 'start' ? 'Start' : 'Destination';
+    el.innerHTML = `<span class="route-marker__badge">${badgeText}</span><span class="route-marker__name">${escapeHtml(label)}</span>`;
+    const tag = new CSS2DObject(el);
+    tag.position.y = 44;
+    tag.center.set(0.5, 0.5);
+    group.add(tag);
+  }
 
   return group;
 }

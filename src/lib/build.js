@@ -114,7 +114,7 @@ function buildSlab(group, outline) {
 
 function buildRoom(group, def, building, level, levelKey) {
   const category = def.category ?? classify(def.name);
-  const colour = new THREE.Color(CATEGORIES[category].color);
+  const colour = new THREE.Color(def.color ?? CATEGORIES[category].color);
   const points = def.poly;
 
   const roomGroup = new THREE.Group();
@@ -126,12 +126,31 @@ function buildRoom(group, def, building, level, levelKey) {
     roughness: 0.85,
     metalness: 0,
     transparent: true,
-    opacity: def.open ? 0.55 : 0.85,
+    opacity: def.opacity ?? (def.open ? 0.65 : 0.85),
   });
   const floor = new THREE.Mesh(extrudePlan(points, 1.2), floorMat);
-  floor.position.y = def.open ? 0.1 : 0.5;
+  floor.position.y = def.elevation ?? (def.open ? 0.1 : 0.5);
   floor.receiveShadow = true;
   roomGroup.add(floor);
+
+  if (def.trees && Array.isArray(def.trees)) {
+    const trunkMat = new THREE.MeshStandardMaterial({ color: 0x5c4033, roughness: 0.9 });
+    const foliageMat = new THREE.MeshStandardMaterial({ color: 0x2e7d32, roughness: 0.7 });
+    for (const [tx, ty] of def.trees) {
+      const treeGroup = new THREE.Group();
+      treeGroup.position.set(tx, 0, ty);
+      const trunk = new THREE.Mesh(new THREE.CylinderGeometry(1.2, 1.6, 7, 8), trunkMat);
+      trunk.position.y = 3.5;
+      trunk.castShadow = true;
+      treeGroup.add(trunk);
+      const foliage = new THREE.Mesh(new THREE.SphereGeometry(5.5, 10, 8), foliageMat);
+      foliage.position.y = 9;
+      foliage.scale.set(1, 1.15, 1);
+      foliage.castShadow = true;
+      treeGroup.add(foliage);
+      roomGroup.add(treeGroup);
+    }
+  }
 
   let walls = null;
   if (!def.open) {

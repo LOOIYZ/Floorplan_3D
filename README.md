@@ -32,7 +32,7 @@ sub-path (GitHub Pages, GitLab Pages, an S3 bucket, a shared drive).
   reproduces the original drawings.
 - **Click any room** for its block, level, type and floor area. Double-click, or
   press *Zoom to room*, to fly the camera in.
-- **Search** by room name or code (`MM3`, `BT1`, `CCNA`, `Surau`). Picking a
+- **Search** by room name or code (`MM2`, `BT1`, `CCNA`, `Surau`). Picking a
   result reveals the room, switching view mode if it would otherwise be buried
   under the floors above.
 - **Legend** entries toggle whole room categories on and off.
@@ -49,8 +49,8 @@ building. Each level is an outline polygon plus a list of rooms:
 
 ```js
 {
-  name: 'Makmal Mikro 3',
-  code: 'MM3',
+  name: 'Makmal Mikro 2',
+  code: 'MM2',
   poly: rect(350, 262, 452, 500),
   doors: [[0, 0.28], [2, 0.28]],
 }
