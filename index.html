@@ -1,0 +1,232 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Faculty Floor Plan · 3D</title>
+    <meta
+      name="description"
+      content="Interactive 3D model of the faculty floor plans for Block A and Block B."
+    />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Jost:wght@300;400;500;600;700&display=swap"
+      rel="stylesheet"
+    />
+  </head>
+  <body>
+    <div id="app">
+      <canvas id="scene"></canvas>
+      <div id="labels" class="label-layer"></div>
+
+      <!-- Dedicated Full-Screen Home Page / Decision Screen -->
+      <div class="home-screen" id="home-screen">
+        <div class="home-screen__container">
+          <header class="home-screen__header">
+            <div class="home-badge">FACULTY OF COMPUTING &amp; INFORMATICS</div>
+            <h1 class="home-screen__title">Floor Plan <span class="accent">3D</span></h1>
+            <p class="home-screen__subtitle">Block A &amp; Block B · Interactive Campus Navigator</p>
+          </header>
+
+          <div class="home-cards">
+            <button class="home-card home-card--directions" id="card-go-directions">
+              <div class="home-card__icon-wrap">🧭</div>
+              <div class="home-card__body">
+                <h3>Find Directions</h3>
+                <p>Get step-by-step route between rooms and entrances.</p>
+                <span class="home-card__cta">Get Directions →</span>
+              </div>
+            </button>
+
+            <button class="home-card home-card--explore" id="card-go-explore">
+              <div class="home-card__icon-wrap">🗺️</div>
+              <div class="home-card__body">
+                <h3>View Floor Plan</h3>
+                <p>Explore 3D levels 1–6, filter room categories, and inspect the building layout.</p>
+                <span class="home-card__cta">Explore 3D Map →</span>
+              </div>
+            </button>
+          </div>
+
+          <section class="field home-quick-search">
+            <label class="field__label" for="home-search">Quick Room Search</label>
+            <div class="search">
+              <input
+                id="home-search"
+                type="search"
+                placeholder="Search any room (e.g. MM3, Surau, CCNA)…"
+                autocomplete="off"
+                spellcheck="false"
+              />
+              <ul id="home-results" class="results" hidden></ul>
+            </div>
+          </section>
+
+          <section class="field home-shortcuts">
+            <span class="field__label">Popular Destinations</span>
+            <div class="chips" id="home-chips">
+              <button class="chip-btn" data-query="Surau">🕌 Surau</button>
+              <button class="chip-btn" data-query="CCNA">💻 Makmal CCNA</button>
+              <button class="chip-btn" data-query="Mikro">🔬 Makmal Mikro</button>
+              <button class="chip-btn" data-query="Office">👔 Office</button>
+              <button class="chip-btn" data-query="Dewan">🎓 Dewan Kuliah</button>
+            </div>
+          </section>
+        </div>
+      </div>
+
+      <!-- 3D Controls Panel (Active when viewing floorplan or directions) -->
+      <aside class="panel" id="main-panel">
+        <header class="panel__head" id="panel-head">
+          <div class="subnav" id="subnav">
+            <button id="btn-back-home" class="subnav__home" title="Return to Home">
+              <span class="subnav__arrow">←</span> Home
+            </button>
+            <div class="subnav__tabs">
+              <button data-tab="explore" class="subnav__tab" id="nav-btn-explore">🗺️ Floorplan</button>
+              <button data-tab="directions" class="subnav__tab" id="nav-btn-directions">🧭 Directions</button>
+            </div>
+          </div>
+        </header>
+
+        <!-- ---------------- EXPLORE / VIEW FLOORPLAN VIEW ---------------- -->
+        <div class="panel__scroll" id="tab-explore" hidden>
+
+          <section class="field">
+            <span class="field__label">Levels</span>
+            <div class="levels" id="levels"></div>
+          </section>
+
+          <section class="field">
+            <span class="field__label">3D View</span>
+            <div class="segmented" id="view-mode">
+              <button data-mode="stack">Stacked</button>
+              <button data-mode="explode" class="is-active">Exploded</button>
+              <button data-mode="single">Single</button>
+            </div>
+          </section>
+
+          <section class="field" id="spread-field">
+            <label class="field__label" for="spread">Floor Separation</label>
+            <input id="spread" type="range" min="0" max="100" value="45" />
+          </section>
+
+          <section class="field">
+            <span class="field__label">Display Options</span>
+            <div class="toggles">
+              <label class="toggle">
+                <input type="checkbox" id="toggle-labels" checked />
+                <span>Room labels</span>
+              </label>
+              <label class="toggle">
+                <input type="checkbox" id="toggle-walls" checked />
+                <span>Walls</span>
+              </label>
+              <label class="toggle">
+                <input type="checkbox" id="toggle-top" />
+                <span>Top-down view</span>
+              </label>
+              <label class="toggle">
+                <input type="checkbox" id="toggle-shadows" checked />
+                <span>Shadows</span>
+              </label>
+            </div>
+          </section>
+
+          <section class="field">
+            <span class="field__label">Room Categories</span>
+            <ul class="legend" id="legend"></ul>
+          </section>
+
+          <button id="explore-bottom-home" class="ghost ghost--block" style="margin-top: 10px;">
+            ← Return to Home Page
+          </button>
+        </div>
+
+        <!-- ---------------- DIRECTIONS VIEW ---------------- -->
+        <div class="panel__scroll" id="tab-directions" hidden>
+          <section class="field">
+            <div class="search">
+              <input
+                id="origin"
+                type="search"
+                placeholder="Where are you starting from?"
+                autocomplete="off"
+                spellcheck="false"
+              />
+              <ul id="origin-results" class="results" hidden></ul>
+            </div>
+          </section>
+
+          <section class="field">
+            <div class="search">
+              <input
+                id="dest"
+                type="search"
+                placeholder="Where are you going?"
+                autocomplete="off"
+                spellcheck="false"
+              />
+              <ul id="dest-results" class="results" hidden></ul>
+            </div>
+          </section>
+
+          <section class="field">
+            <label class="toggle">
+              <input type="checkbox" id="step-free" />
+              <span>Step-free route (avoid stairs / elevator only)</span>
+            </label>
+          </section>
+
+          <section class="field" id="route-panel" hidden>
+            <span class="field__label">Route Guidance</span>
+            <div class="route-summary" id="route-summary"></div>
+            <ol class="steps" id="steps"></ol>
+          </section>
+
+          <section class="field" id="entrances-panel" hidden>
+            <span class="field__label">From Faculty Entrances</span>
+            <p class="hint">Walking time from each way into the faculty.</p>
+            <ul class="entrances" id="entrances"></ul>
+          </section>
+
+          <p class="hint" id="directions-empty">
+            Pick a destination and we'll show the way from a starting room or
+            from every entrance to the faculty.
+          </p>
+
+          <button id="restart-directions" class="ghost ghost--block" hidden style="margin-top: 16px;">
+            Start over &amp; return to Home
+          </button>
+        </div>
+
+        <footer class="panel__foot">
+          <button id="fit" class="ghost">Fit view</button>
+          <p>Drag to orbit · scroll to zoom</p>
+        </footer>
+      </aside>
+
+      <div class="info" id="info" hidden>
+        <button class="info__close" id="info-close" aria-label="Close">&times;</button>
+        <p class="info__eyebrow" id="info-where"></p>
+        <h2 id="info-name"></h2>
+        <p class="info__code" id="info-code" hidden></p>
+        <dl class="info__meta">
+          <div><dt>Type</dt><dd id="info-type"></dd></div>
+          <div><dt>Floor area</dt><dd id="info-area"></dd></div>
+        </dl>
+        <button class="info__focus" id="info-focus">Zoom to room</button>
+        <button class="info__directions" id="info-directions">
+          <span class="info__directions-icon">→</span>Directions to here
+        </button>
+      </div>
+
+      <div class="tooltip" id="tooltip" hidden></div>
+
+      <div class="loading" id="loading"><span></span>Building model…</div>
+    </div>
+
+    <script type="module" src="/src/main.js"></script>
+  </body>
+</html>
