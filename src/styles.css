@@ -2105,8 +2105,12 @@ input[type='range']::-webkit-slider-thumb:active {
     height: 68%;
     min-height: 300px;
   }
-  .panel.is-expanded .panel__scroll {
+  /* Only display the active tab that is NOT hidden */
+  .panel.is-expanded .panel__scroll:not([hidden]) {
     display: flex !important;
+  }
+  .panel.is-expanded .panel__scroll[hidden] {
+    display: none !important;
   }
   .panel.is-expanded .panel__foot {
     display: flex !important;
