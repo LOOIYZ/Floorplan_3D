@@ -288,6 +288,15 @@ function paint(room, mode) {
 
 function select(room, { fly = false } = {}) {
   if (state.selected && state.selected !== room) paint(state.selected, 'base');
+
+  // If selecting a different room or deselecting, restore labels
+  if (state.focusOnlyRooms && (!room || !state.focusOnlyRooms.has(room))) {
+    state.focusOnlyRooms = null;
+    for (const r of campus.rooms) {
+      r.label.element?.classList.remove('is-highlighted');
+    }
+  }
+
   state.selected = room;
   if (!room) {
     infoCard.hidden = true;
@@ -457,7 +466,7 @@ const navBtnDirections = document.getElementById('nav-btn-directions');
 
 let currentTab = 'home';
 
-function switchTab(name) {
+function switchTab(name, { refocus = true, autoExpand = true } = {}) {
   currentTab = name;
 
   if (name === 'home') {
@@ -467,6 +476,12 @@ function switchTab(name) {
     if (labelLayer) labelLayer.style.display = 'none';
     if (panelReopenFab) panelReopenFab.hidden = true;
     if (isMobile()) collapsePanel();
+
+    // Reset focused destination labels when returning to home
+    state.focusOnlyRooms = null;
+    for (const r of campus.rooms) {
+      r.label.element?.classList.remove('is-highlighted');
+    }
   } else {
     if (homeScreen) homeScreen.classList.add('is-hidden');
     if (mainPanel) {
@@ -477,7 +492,7 @@ function switchTab(name) {
     if (viewportHud) viewportHud.hidden = false;
     if (labelLayer) labelLayer.style.display = state.labels ? '' : 'none';
 
-    if (isMobile()) {
+    if (autoExpand && isMobile()) {
       setTimeout(expandPanel, 60);
     }
 
@@ -513,10 +528,12 @@ function switchTab(name) {
       directions.refresh();
     }
 
-    // Refocus camera for panel layout
-    setTimeout(() => {
-      frameAll(0.6);
-    }, 50);
+    // Refocus camera for panel layout if requested
+    if (refocus) {
+      setTimeout(() => {
+        frameAll(0.6);
+      }, 50);
+    }
   }
 }
 
@@ -731,6 +748,11 @@ document.getElementById('preset-top')?.addEventListener('click', () => {
 });
 
 document.getElementById('preset-fit')?.addEventListener('click', () => {
+  state.focusOnlyRooms = null;
+  for (const r of campus.rooms) {
+    r.label.element?.classList.remove('is-highlighted');
+  }
+  updateLabels();
   frameAll(0.7);
 });
 
@@ -1057,11 +1079,14 @@ function attachRoomSearch(inputEl, resultsEl, onSelect) {
         `<span class="where">${room.building.name.replace('Block ', '')} · ${room.level.name.replace('Level ', 'L')}</span>`;
 
       li.addEventListener('click', () => {
-        revealRoom(room);
         resultsEl.hidden = true;
         inputEl.value = room.code ? `${room.name} (${room.code})` : room.name;
         if (homeSearchClear) homeSearchClear.hidden = false;
-        if (onSelect) onSelect(room);
+        if (onSelect) {
+          onSelect(room);
+        } else {
+          highlightDestination(room.code || room.name);
+        }
       });
       resultsEl.append(li);
     }
@@ -1084,9 +1109,9 @@ function attachRoomSearch(inputEl, resultsEl, onSelect) {
   });
 }
 
-// Attach home search (auto-switches to explore view on select)
-attachRoomSearch(homeSearchInput, homeResultsList, () => {
-  switchTab('explore');
+// Attach home search (auto-switches to explore view on select & highlights location)
+attachRoomSearch(homeSearchInput, homeResultsList, (room) => {
+  highlightDestination(room.code || room.name);
 });
 
 homeSearchClear?.addEventListener('click', () => {
@@ -1098,15 +1123,93 @@ homeSearchClear?.addEventListener('click', () => {
   homeSearchClear.hidden = true;
 });
 
-// Attach popular destination chips on Home
+function highlightDestination(query) {
+  const q = query.toLowerCase().trim();
+
+  // Find all rooms matching this query
+  const matchingRooms = campus.rooms.filter((room) => {
+    const haystack = `${room.name} ${room.code ?? ''} ${room.note ?? ''} ${room.category} ${room.building.name} ${room.level.name}`.toLowerCase();
+    return haystack.includes(q);
+  });
+
+  if (!matchingRooms.length) return;
+
+  // Primary target room
+  const targetRoom = matchingRooms[0];
+
+  // 1. Collapse all other labels: only matching destination rooms will show
+  state.focusOnlyRooms = new Set(matchingRooms);
+
+  // 2. Ensure labels layer is visible and active
+  state.labels = true;
+  const toggleLabels = document.getElementById('toggle-labels');
+  if (toggleLabels) toggleLabels.checked = true;
+  labelLayer.style.display = '';
+
+  // 3. Switch to explore view without resetting camera or expanding mobile sheet
+  switchTab('explore', { refocus: false, autoExpand: false });
+
+  // On mobile: collapse the panel so the user can immediately see the 3D map!
+  if (isMobile()) {
+    collapsePanel();
+  }
+
+  // 4. Ensure target levels and categories are active and unhidden
+  for (const r of matchingRooms) {
+    state.hiddenLevels.delete(r.levelKey);
+    state.hiddenCategories.delete(r.category);
+    if (state.activeLevels) state.activeLevels.add(r.levelKey);
+  }
+  state.activeLevel = targetRoom.levelKey;
+
+  // In stack mode, ensure the floor is single mode so it's not obscured by higher slabs
+  if (state.mode === 'stack') {
+    setMode('single');
+  }
+
+  // 5. Highlight the rooms in 3D scene & their labels
+  for (const r of campus.rooms) {
+    if (matchingRooms.includes(r)) {
+      paint(r, 'selected');
+      r.label.element?.classList.add('is-highlighted');
+    } else {
+      paint(r, 'base');
+      r.label.element?.classList.remove('is-highlighted');
+    }
+  }
+
+  // 6. Select the target room and show Info Card
+  state.selected = targetRoom;
+  showInfo(targetRoom);
+
+  // 7. Update UI
+  renderLevelList();
+  renderLegend();
+  applyLayout();
+  updateLabels();
+
+  // 8. Direct camera flight smoothly to the target location
+  setTimeout(() => {
+    if (matchingRooms.length === 1) {
+      focusRoom(targetRoom);
+    } else {
+      const pts = matchingRooms.map((r) => {
+        const lvl = campus.levels.find((l) => l.key === r.levelKey);
+        const y = lvl ? lvl.group.position.y : 0;
+        return new THREE.Vector3(r.centre.x, y, r.centre.y);
+      });
+      framePoints(pts, 0.85);
+    }
+  }, 40);
+}
+
+// Attach popular destination chips on Home: direct highlight location & collapse other labels
 document.getElementById('home-chips')?.addEventListener('click', (e) => {
   const btn = e.target.closest('.chip-btn');
   if (!btn) return;
-  const q = btn.dataset.query.toLowerCase();
-  const match = searchIndex.find((entry) => entry.haystack.includes(q));
-  if (match) {
-    revealRoom(match.room);
-    switchTab('explore');
+  const q = btn.dataset.query;
+  if (q) {
+    highlightDestination(q);
   }
 });
 
@@ -1215,6 +1318,13 @@ function updateLabels() {
   const targetLevels = getTargetLevels();
 
   for (const room of campus.rooms) {
+    // If a specific destination is highlighted from Popular Destinations, collapse all other labels
+    if (state.focusOnlyRooms && !state.focusOnlyRooms.has(room)) {
+      room.label.visible = false;
+      if (room.label.element) room.label.element.style.display = 'none';
+      continue;
+    }
+
     if (!isRoomReadable(room)) {
       room.label.visible = false;
       if (room.label.element) room.label.element.style.display = 'none';
@@ -1516,7 +1626,14 @@ function checkUrlHash() {
 
 // ---------------------------------------------------------------- boot
 
-document.getElementById('fit')?.addEventListener('click', () => frameAll());
+document.getElementById('fit')?.addEventListener('click', () => {
+  state.focusOnlyRooms = null;
+  for (const r of campus.rooms) {
+    r.label.element?.classList.remove('is-highlighted');
+  }
+  updateLabels();
+  frameAll();
+});
 scene.add(sun.target);
 
 resize();
