@@ -465,11 +465,21 @@ function switchTab(name) {
     if (mainPanel) mainPanel.classList.add('is-hidden');
     if (viewportHud) viewportHud.hidden = true;
     if (labelLayer) labelLayer.style.display = 'none';
+    if (panelReopenFab) panelReopenFab.hidden = true;
+    if (isMobile()) collapsePanel();
   } else {
     if (homeScreen) homeScreen.classList.add('is-hidden');
-    if (mainPanel) mainPanel.classList.remove('is-hidden');
+    if (mainPanel) {
+      mainPanel.classList.remove('is-hidden');
+      mainPanel.classList.remove('is-collapsed');
+    }
+    if (panelReopenFab) panelReopenFab.hidden = true;
     if (viewportHud) viewportHud.hidden = false;
     if (labelLayer) labelLayer.style.display = state.labels ? '' : 'none';
+
+    if (isMobile()) {
+      setTimeout(expandPanel, 60);
+    }
 
     if (navBtnExplore) {
       navBtnExplore.classList.toggle('is-active', name === 'explore');
@@ -521,6 +531,170 @@ document.getElementById('explore-bottom-home')?.addEventListener('click', () => 
 // Wire Subnav Mode Switcher
 navBtnExplore?.addEventListener('click', () => switchTab('explore'));
 navBtnDirections?.addEventListener('click', () => switchTab('directions'));
+
+// ---------------------------------------------------------------- widget expand / collapse (desktop & mobile)
+
+const panelHandle = document.getElementById('panel-handle');
+const panelCollapseBtn = document.getElementById('panel-collapse-btn');
+const panelReopenFab = document.getElementById('panel-reopen-fab');
+
+function isMobile() {
+  return window.innerWidth <= 768;
+}
+
+// Mobile bottom-sheet: expand to show content
+function expandPanel() {
+  if (!mainPanel) return;
+  mainPanel.classList.add('is-expanded');
+  if (panelHandle) panelHandle.setAttribute('aria-expanded', 'true');
+  if (panelCollapseBtn) {
+    panelCollapseBtn.setAttribute('aria-expanded', 'true');
+    panelCollapseBtn.setAttribute('title', 'Collapse menu');
+    panelCollapseBtn.setAttribute('aria-label', 'Collapse menu');
+  }
+}
+
+// Mobile bottom-sheet: collapse to bottom bar
+function collapsePanel() {
+  if (!mainPanel) return;
+  mainPanel.classList.remove('is-expanded');
+  if (panelHandle) panelHandle.setAttribute('aria-expanded', 'false');
+  if (panelCollapseBtn) {
+    panelCollapseBtn.setAttribute('aria-expanded', 'false');
+    panelCollapseBtn.setAttribute('title', 'Expand menu');
+    panelCollapseBtn.setAttribute('aria-label', 'Expand menu');
+  }
+}
+
+// Mobile bottom-sheet: toggle between full drawer and compact bottom bar
+function togglePanel() {
+  if (!mainPanel) return;
+  if (mainPanel.classList.contains('is-expanded')) {
+    collapsePanel();
+  } else {
+    expandPanel();
+  }
+}
+
+// Desktop sidebar: collapse out of view to the left
+function collapseWidget() {
+  if (!mainPanel) return;
+  mainPanel.classList.add('is-collapsed');
+  if (panelCollapseBtn) {
+    panelCollapseBtn.setAttribute('aria-expanded', 'false');
+    panelCollapseBtn.setAttribute('title', 'Show controls');
+    panelCollapseBtn.setAttribute('aria-label', 'Show controls');
+  }
+  // Reveal floating reopen pill
+  if (panelReopenFab) {
+    setTimeout(() => {
+      panelReopenFab.hidden = false;
+      panelReopenFab.classList.remove('is-entering');
+      void panelReopenFab.offsetWidth;
+      panelReopenFab.classList.add('is-entering');
+    }, 150);
+  }
+}
+
+// Desktop sidebar: reopen sidebar and frame camera
+function expandWidget() {
+  if (!mainPanel) return;
+  mainPanel.classList.remove('is-collapsed');
+  if (panelCollapseBtn) {
+    panelCollapseBtn.setAttribute('aria-expanded', 'true');
+    panelCollapseBtn.setAttribute('title', 'Collapse panel (Shortcut: [)');
+    panelCollapseBtn.setAttribute('aria-label', 'Collapse panel');
+  }
+  if (panelReopenFab) {
+    panelReopenFab.hidden = true;
+    panelReopenFab.classList.remove('is-entering');
+  }
+  setTimeout(() => {
+    frameAll(0.5);
+  }, 250);
+}
+
+// Universal toggle button handler (adapts automatically to phone or computer mode)
+function toggleWidget() {
+  if (!mainPanel) return;
+  if (isMobile()) {
+    togglePanel();
+  } else {
+    if (mainPanel.classList.contains('is-collapsed')) {
+      expandWidget();
+    } else {
+      collapseWidget();
+    }
+  }
+}
+
+// Wire the collapse/expand button in the panel header
+panelCollapseBtn?.addEventListener('click', toggleWidget);
+
+// Wire the floating FAB to reopen the widget
+panelReopenFab?.addEventListener('click', () => {
+  if (isMobile()) {
+    mainPanel.classList.remove('is-collapsed');
+    panelReopenFab.hidden = true;
+    expandPanel();
+  } else {
+    expandWidget();
+  }
+});
+
+// Tap the mobile pill handle to expand or collapse
+panelHandle?.addEventListener('click', togglePanel);
+
+// Touch swipe gesture on mobile handle bar / panel header to slide up/down
+let touchStartY = 0;
+let touchStartTime = 0;
+const panelHead = document.getElementById('panel-head');
+
+[panelHandle, panelHead].forEach((el) => {
+  el?.addEventListener('touchstart', (e) => {
+    if (!isMobile()) return;
+    touchStartY = e.touches[0].clientY;
+    touchStartTime = Date.now();
+  }, { passive: true });
+
+  el?.addEventListener('touchend', (e) => {
+    if (!isMobile()) return;
+    const touchEndY = e.changedTouches[0].clientY;
+    const deltaY = touchEndY - touchStartY;
+    const deltaTime = Date.now() - touchStartTime;
+
+    // Swipe down: collapse if expanded
+    if (deltaY > 40 && deltaTime < 400) {
+      collapsePanel();
+    }
+    // Swipe up: expand if collapsed
+    else if (deltaY < -40 && deltaTime < 400) {
+      expandPanel();
+    }
+  }, { passive: true });
+});
+
+// Desktop keyboard shortcut: press '[' or Ctrl+B to toggle the panel
+window.addEventListener('keydown', (e) => {
+  const activeTag = document.activeElement?.tagName.toLowerCase();
+  if (activeTag === 'input' || activeTag === 'textarea' || activeTag === 'select') return;
+  if (currentTab === 'home') return;
+
+  if (e.key === '[' || (e.ctrlKey && e.key === 'b') || (e.metaKey && e.key === 'b')) {
+    e.preventDefault();
+    toggleWidget();
+  }
+});
+
+// Mobile: collapse sheet when user taps anywhere on the 3D canvas
+const appContainer = document.getElementById('app');
+appContainer?.addEventListener('touchstart', (e) => {
+  if (!isMobile() || !mainPanel || !mainPanel.classList.contains('is-expanded')) return;
+  if (mainPanel.contains(e.target)) return;
+  if (viewportHud && viewportHud.contains(e.target)) return;
+  if (panelReopenFab && panelReopenFab.contains(e.target)) return;
+  collapsePanel();
+}, { passive: true });
 
 // ---------------------------------------------------------------- viewport HUD controls
 

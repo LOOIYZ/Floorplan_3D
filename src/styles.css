@@ -419,6 +419,139 @@ button, input, select {
   transform: translateY(12px) scale(0.97);
 }
 
+/* ---- UI Icons base sizing ---- */
+.ui-icon {
+  width: 18px;
+  height: 18px;
+  display: block;
+  stroke: currentColor;
+  fill: none;
+  flex-shrink: 0;
+}
+
+/* ---- Desktop panel collapse / expand ---- */
+
+.panel.is-collapsed {
+  transform: translateX(calc(-100% - 30px));
+  opacity: 0;
+  pointer-events: none;
+}
+
+/* ---- Panel collapse toggle button (in header) ---- */
+
+.panel__collapse-btn {
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  flex-shrink: 0;
+  padding: 0;
+  color: var(--muted);
+  background: rgba(15, 23, 42, 0.04);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.panel__collapse-btn:hover {
+  color: var(--blue-accent);
+  background: rgba(37, 99, 235, 0.08);
+  border-color: rgba(37, 99, 235, 0.25);
+  transform: scale(1.06);
+}
+
+.panel__collapse-btn:active {
+  transform: scale(0.94);
+}
+
+.panel__collapse-btn .ui-icon {
+  transition: transform 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+/* Desktop: rotate the chevron to point left (hide direction) */
+@media (min-width: 769px) {
+  .panel__collapse-btn .ui-icon {
+    transform: rotate(90deg);
+  }
+}
+
+/* ---- Floating FAB to reopen collapsed panel ---- */
+
+.panel-reopen-fab {
+  position: absolute;
+  z-index: 6;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  height: 40px;
+  padding: 0 16px 0 12px;
+  color: var(--navy);
+  background: var(--surface-glass);
+  backdrop-filter: var(--glass-blur);
+  -webkit-backdrop-filter: var(--glass-blur);
+  border: 1px solid var(--border-glass);
+  border-radius: var(--radius-full);
+  box-shadow: var(--shadow-elevated), 0 4px 20px rgba(37, 99, 235, 0.12);
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+
+  /* Desktop positioning */
+  top: 20px;
+  left: 20px;
+}
+
+.panel-reopen-fab[hidden] {
+  display: none !important;
+}
+
+.panel-reopen-fab .ui-icon {
+  width: 18px;
+  height: 18px;
+  color: var(--blue-accent);
+}
+
+.panel-reopen-fab__text {
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--navy);
+  white-space: nowrap;
+}
+
+.panel-reopen-fab:hover {
+  background: #ffffff;
+  color: var(--blue-accent);
+  transform: translateY(-2px) scale(1.03);
+  box-shadow: var(--shadow-elevated), var(--shadow-glow);
+}
+
+.panel-reopen-fab:hover .panel-reopen-fab__text {
+  color: var(--blue-accent);
+}
+
+.panel-reopen-fab:active {
+  transform: translateY(0) scale(0.97);
+}
+
+/* Entrance animation for FAB */
+@keyframes fabPop {
+  from {
+    opacity: 0;
+    transform: scale(0.7) translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
+}
+
+.panel-reopen-fab.is-entering {
+  animation: fabPop 0.28s cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
+}
+
 .panel__head {
   position: relative;
   padding: 16px 18px;
@@ -1942,16 +2075,41 @@ input[type='range']::-webkit-slider-thumb:active {
     font-size: 28px;
   }
 
+  /* ---- Mobile bottom-sheet: collapsed by default ---- */
   .panel {
     top: auto;
     left: 10px;
     right: 10px;
     bottom: 10px;
     width: auto;
-    height: 48%;
-    min-height: 260px;
+    /* collapsed: only the handle-bar + header visible */
+    height: auto;
+    max-height: calc(100dvh - 80px);
     border-radius: 20px 20px 16px 16px;
     box-shadow: 0 -8px 36px -8px rgba(15, 23, 42, 0.28);
+    transition: transform 0.35s cubic-bezier(0.16, 1, 0.3, 1),
+                opacity   0.28s cubic-bezier(0.16, 1, 0.3, 1),
+                visibility 0.28s;
+  }
+
+  /* Hide scrollable content when collapsed */
+  .panel:not(.is-expanded) .panel__scroll {
+    display: none !important;
+  }
+  .panel:not(.is-expanded) .panel__foot {
+    display: none !important;
+  }
+
+  /* Expanded state: fill most of the screen */
+  .panel.is-expanded {
+    height: 68%;
+    min-height: 300px;
+  }
+  .panel.is-expanded .panel__scroll {
+    display: flex !important;
+  }
+  .panel.is-expanded .panel__foot {
+    display: flex !important;
   }
 
   .info {
@@ -1960,5 +2118,115 @@ input[type='range']::-webkit-slider-thumb:active {
     left: 14px;
     right: 14px;
     width: auto;
+  }
+
+  /* Mobile collapsed: slide the entire panel off-screen */
+  .panel.is-collapsed {
+    transform: translateY(calc(100% + 30px));
+    opacity: 0;
+    pointer-events: none;
+  }
+
+  /* Mobile header compact layout */
+  .panel__head {
+    padding: 8px 12px;
+  }
+  .subnav {
+    gap: 6px;
+  }
+  .subnav__home {
+    padding: 6px 10px;
+    font-size: 11.5px;
+    gap: 4px;
+    flex-shrink: 0;
+  }
+  .subnav__tabs {
+    flex: 1;
+    display: flex;
+    justify-content: center;
+    gap: 2px;
+    padding: 2px;
+  }
+  .subnav__tab {
+    padding: 5px 8px;
+    font-size: 11.5px;
+    gap: 4px;
+    flex: 1;
+    justify-content: center;
+  }
+  .subnav__tab .tab-icon {
+    width: 13px;
+    height: 13px;
+  }
+
+  /* Mobile: chevron points UP when collapsed at bottom to indicate expand; DOWN when expanded */
+  .panel__collapse-btn {
+    width: 32px;
+    height: 32px;
+    flex-shrink: 0;
+    border-radius: var(--radius-sm);
+    background: rgba(15, 23, 42, 0.05);
+    border: 1px solid var(--line);
+  }
+  .panel__collapse-btn .ui-icon {
+    transform: rotate(180deg);
+  }
+  .panel.is-expanded .panel__collapse-btn .ui-icon {
+    transform: rotate(0deg);
+  }
+
+  /* Mobile FAB positioning: bottom center */
+  .panel-reopen-fab {
+    top: auto;
+    left: 50%;
+    bottom: 18px;
+    transform: translateX(-50%);
+    height: 42px;
+    padding: 0 18px 0 14px;
+  }
+
+  .panel-reopen-fab:hover {
+    transform: translateX(-50%) translateY(-2px) scale(1.03);
+  }
+
+  .panel-reopen-fab:active {
+    transform: translateX(-50%) translateY(0) scale(0.97);
+  }
+}
+
+/* ---------------------------------------------------------------- panel handle-bar (mobile only) */
+
+.panel__handle-bar {
+  display: none; /* hidden on desktop */
+}
+
+@media (max-width: 768px) {
+  .panel__handle-bar {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 100%;
+    padding: 10px 0 6px;
+    background: transparent;
+    border: 0;
+    cursor: pointer;
+    flex-shrink: 0;
+    -webkit-tap-highlight-color: transparent;
+    touch-action: manipulation;
+  }
+
+  .panel__handle-pill {
+    width: 36px;
+    height: 4px;
+    border-radius: 2px;
+    background: rgba(15, 23, 42, 0.22);
+    transition: background 0.18s ease, width 0.18s ease;
+    display: block;
+  }
+
+  .panel__handle-bar:hover .panel__handle-pill,
+  .panel__handle-bar:focus-visible .panel__handle-pill {
+    background: rgba(37, 99, 235, 0.55);
+    width: 44px;
   }
 }
