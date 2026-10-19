@@ -105,6 +105,31 @@
         <rect x="3" y="3" width="18" height="18" rx="2"></rect>
         <line x1="9" y1="3" x2="9" y2="21"></line>
       </symbol>
+      <symbol id="icon-camera" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"></path>
+        <circle cx="12" cy="13" r="4"></circle>
+      </symbol>
+      <symbol id="icon-alert-triangle" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"></path>
+        <line x1="12" y1="9" x2="12" y2="13"></line>
+        <line x1="12" y1="17" x2="12.01" y2="17"></line>
+      </symbol>
+      <symbol id="icon-check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <polyline points="20 6 9 17 4 12"></polyline>
+      </symbol>
+      <symbol id="icon-trash" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <polyline points="3 6 5 6 21 6"></polyline>
+        <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
+      </symbol>
+      <symbol id="icon-refresh" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <polyline points="23 4 23 10 17 10"></polyline>
+        <polyline points="1 20 1 14 7 14"></polyline>
+        <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path>
+      </symbol>
+      <symbol id="icon-clipboard" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"></path>
+        <rect x="8" y="2" width="8" height="4" rx="1" ry="1"></rect>
+      </symbol>
     </svg>
 
     <div id="app">
@@ -122,6 +147,10 @@
         </button>
 
         <div class="camera-presets" role="toolbar" aria-label="Camera Presets">
+          <button class="preset-btn is-active" id="preset-labels" title="Toggle Room Labels" aria-label="Toggle room labels">
+            <svg class="ui-icon" aria-hidden="true"><use href="#icon-layers"></use></svg>
+            <span class="preset-label">Labels</span>
+          </button>
           <button class="preset-btn" id="preset-iso" title="Perspective / Isometric View" aria-label="Isometric 3D view">
             <svg class="ui-icon" aria-hidden="true"><use href="#icon-cube"></use></svg>
             <span class="preset-label">3D</span>
@@ -134,91 +163,168 @@
             <svg class="ui-icon" aria-hidden="true"><use href="#icon-fit"></use></svg>
             <span class="preset-label">Fit</span>
           </button>
+          <button class="preset-btn preset-btn--report" id="btn-hud-reports" title="View Facility Reports Log" aria-label="View facility reports">
+            <svg class="ui-icon" aria-hidden="true"><use href="#icon-alert-triangle"></use></svg>
+            <span class="preset-label">Reports</span>
+            <span class="reports-count-badge" hidden>0</span>
+          </button>
         </div>
       </div>
 
       <!-- Dedicated Full-Screen Home Page / Decision Screen -->
       <div class="home-screen" id="home-screen">
-        <div class="home-screen__container">
-          <header class="home-screen__header">
-            <div class="home-badge">
-              <span class="home-badge__dot"></span>
-              Faculty of Computer Science and Information Technology
+        <div class="home-screen__wrapper">
+          <!-- Left Side on Desktop: Virtual Tour Guide -->
+          <div class="home-screen__guide" id="home-screen-guide">
+            <div class="home-screen__guide-inner">
+              <img
+                src="./guide-welcome-cropped.png"
+                alt="FCSIT Virtual Guide: Ever wondered what's behind FCSIT's walls? Grab a seat, I'm taking you on a virtual tour!"
+                class="home-screen__guide-img"
+                loading="eager"
+              />
             </div>
-            <h1 class="home-screen__title">Floor Plan <span class="accent">3D</span></h1>
-            <p class="home-screen__subtitle">Block A &amp; Block B · Interactive Campus Navigator</p>
-          </header>
-
-          <div class="home-cards">
-            <button class="home-card home-card--directions" id="card-go-directions">
-              <div class="home-card__icon-wrap">
-                <svg class="card-icon" aria-hidden="true"><use href="#icon-compass"></use></svg>
-              </div>
-              <div class="home-card__body">
-                <h3>Find Directions</h3>
-                <p>Get step-by-step route between rooms, lifts, and entrances.</p>
-                <span class="home-card__cta">Get Directions →</span>
-              </div>
-            </button>
-
-            <button class="home-card home-card--explore" id="card-go-explore">
-              <div class="home-card__icon-wrap">
-                <svg class="card-icon" aria-hidden="true"><use href="#icon-layers"></use></svg>
-              </div>
-              <div class="home-card__body">
-                <h3>View Floor Plan</h3>
-                <p>Explore 3D levels 1–6, filter room categories, and inspect building layout.</p>
-                <span class="home-card__cta">Explore 3D Map →</span>
-              </div>
-            </button>
           </div>
 
-          <section class="field home-quick-search">
-            <label class="field__label" for="home-search">Quick Room Search</label>
-            <div class="search search--hero">
-              <span class="search__icon" aria-hidden="true">
-                <svg class="ui-icon"><use href="#icon-search"></use></svg>
+          <!-- Right Side on Desktop / Main Card: Navigation & Search -->
+          <div class="home-screen__container">
+            <!-- Mobile Guide Opener Pill -->
+            <button class="mobile-guide-pill" id="mobile-guide-open-btn" aria-label="Meet your virtual guide" type="button">
+              <span class="mobile-guide-pill__avatar">
+                <img src="./guide-welcome-cropped.png" alt="" />
               </span>
-              <input
-                id="home-search"
-                type="search"
-                placeholder="Search any room (e.g. MM2, Surau, CCNA, DK1)…"
-                autocomplete="off"
-                spellcheck="false"
-              />
-              <kbd class="search__kbd" title="Shortcut">Ctrl K</kbd>
-              <button type="button" class="search__clear" id="home-search-clear" hidden aria-label="Clear search">
-                <svg class="ui-icon-xs"><use href="#icon-cross"></use></svg>
-              </button>
-              <ul id="home-results" class="results" hidden></ul>
-            </div>
-          </section>
+              <span class="mobile-guide-pill__text">Meet your guide 👋</span>
+              <span class="mobile-guide-pill__sparkle">✨</span>
+            </button>
 
-          <section class="field home-shortcuts">
-            <span class="field__label">Popular Destinations</span>
-            <div class="chips" id="home-chips">
-              <button class="chip-btn" data-query="Surau">
-                <svg class="chip-icon" aria-hidden="true"><use href="#icon-mosque"></use></svg>
-                Surau
+            <header class="home-screen__header">
+              <div class="home-badge">
+                <span class="home-badge__dot"></span>
+                Faculty of Computer Science and Information Technology
+              </div>
+              <h1 class="home-screen__title">Floor Plan <span class="accent">3D</span></h1>
+            </header>
+
+            <div class="home-cards">
+              <button class="home-card home-card--directions" id="card-go-directions">
+                <div class="home-card__icon-wrap">
+                  <svg class="card-icon" aria-hidden="true"><use href="#icon-compass"></use></svg>
+                </div>
+                <div class="home-card__body">
+                  <h3>Find Directions</h3>
+                  <span class="home-card__cta">Get Directions →</span>
+                </div>
               </button>
-              <button class="chip-btn" data-query="CCNA">
-                <svg class="chip-icon" aria-hidden="true"><use href="#icon-laptop"></use></svg>
-                Makmal CCNA
+
+              <button class="home-card home-card--explore" id="card-go-explore">
+                <div class="home-card__icon-wrap">
+                  <svg class="card-icon" aria-hidden="true"><use href="#icon-layers"></use></svg>
+                </div>
+                <div class="home-card__body">
+                  <h3>View Floor Plan</h3>
+                  <span class="home-card__cta">Explore 3D Map →</span>
+                </div>
               </button>
-              <button class="chip-btn" data-query="Mikro">
-                <svg class="chip-icon" aria-hidden="true"><use href="#icon-microscope"></use></svg>
-                Makmal Mikro
-              </button>
-              <button class="chip-btn" data-query="Office">
-                <svg class="chip-icon" aria-hidden="true"><use href="#icon-briefcase"></use></svg>
-                Faculty Office
-              </button>
-              <button class="chip-btn" data-query="Dewan">
-                <svg class="chip-icon" aria-hidden="true"><use href="#icon-gradcap"></use></svg>
-                Dewan Kuliah
+
+              <button class="home-card home-card--report" id="card-go-report">
+                <div class="home-card__icon-wrap">
+                  <svg class="card-icon" aria-hidden="true"><use href="#icon-camera"></use></svg>
+                </div>
+                <div class="home-card__body">
+                  <div class="home-card__title-row">
+                    <h3>Report Broken Facility</h3>
+                    <span class="home-card__badge-pill">Snap &amp; Report</span>
+                  </div>
+                  <span class="home-card__cta">Report Broken Issue →</span>
+                </div>
               </button>
             </div>
-          </section>
+
+            <section class="field home-quick-search">
+              <label class="field__label" for="home-search">Quick Room Search</label>
+              <div class="search search--hero">
+                <span class="search__icon" aria-hidden="true">
+                  <svg class="ui-icon"><use href="#icon-search"></use></svg>
+                </span>
+                <input
+                  id="home-search"
+                  type="search"
+                  placeholder="Search any room (e.g. MM2, Surau, CCNA, DK1)…"
+                  autocomplete="off"
+                  spellcheck="false"
+                />
+                <kbd class="search__kbd" title="Shortcut">Ctrl K</kbd>
+                <button type="button" class="search__clear" id="home-search-clear" hidden aria-label="Clear search">
+                  <svg class="ui-icon-xs"><use href="#icon-cross"></use></svg>
+                </button>
+                <ul id="home-results" class="results" hidden></ul>
+              </div>
+            </section>
+
+            <section class="field home-shortcuts">
+              <span class="field__label">Popular Destinations</span>
+              <div class="chips" id="home-chips">
+                <button class="chip-btn" data-query="Surau">
+                  <svg class="chip-icon" aria-hidden="true"><use href="#icon-mosque"></use></svg>
+                  Surau
+                </button>
+                <button class="chip-btn" data-query="CCNA">
+                  <svg class="chip-icon" aria-hidden="true"><use href="#icon-laptop"></use></svg>
+                  Makmal CCNA
+                </button>
+                <button class="chip-btn" data-query="Mikro">
+                  <svg class="chip-icon" aria-hidden="true"><use href="#icon-microscope"></use></svg>
+                  Makmal Mikro
+                </button>
+                <button class="chip-btn" data-query="Office">
+                  <svg class="chip-icon" aria-hidden="true"><use href="#icon-briefcase"></use></svg>
+                  Faculty Office
+                </button>
+                <button class="chip-btn" data-query="Dewan">
+                  <svg class="chip-icon" aria-hidden="true"><use href="#icon-gradcap"></use></svg>
+                  Dewan Kuliah
+                </button>
+              </div>
+            </section>
+          </div>
+        </div>
+      </div>
+
+      <!-- Phone Mode: Dedicated Guide Welcome Pop-up Modal -->
+      <div class="guide-popup-modal" id="guide-popup-modal" hidden>
+        <div class="guide-popup-backdrop" id="guide-popup-backdrop"></div>
+        <div class="guide-popup-card" role="dialog" aria-modal="true" aria-label="Faculty Welcome Tour Guide">
+          <button class="guide-popup-close" id="guide-popup-close" aria-label="Close welcome message">&times;</button>
+          <div class="guide-popup-body">
+            <div class="guide-popup-img-wrap">
+              <img
+                src="./guide-welcome-cropped.png"
+                alt="FCSIT Virtual Guide: Ever wondered what's behind FCSIT's walls? Grab a seat, I'm taking you on a virtual tour!"
+                class="guide-popup-img"
+              />
+            </div>
+            <div class="guide-popup-action">
+              <button class="guide-popup-cta" id="guide-popup-cta" type="button">
+                <span>Start Virtual Tour</span>
+                <span class="guide-popup-cta__arrow">→</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Multiple Destinations Disambiguation Modal -->
+      <div class="destination-picker-modal" id="destination-picker-modal" hidden>
+        <div class="destination-picker-backdrop" id="destination-picker-backdrop"></div>
+        <div class="destination-picker-dialog" role="dialog" aria-labelledby="destination-picker-title">
+          <div class="destination-picker-header">
+            <div>
+              <h3 class="destination-picker-title" id="destination-picker-title">Select Destination</h3>
+              <p class="destination-picker-subtitle" id="destination-picker-subtitle">Multiple locations found. Choose which one to view:</p>
+            </div>
+            <button class="destination-picker-close" id="destination-picker-close" aria-label="Close dialog">&times;</button>
+          </div>
+          <ul class="destination-picker-list" id="destination-picker-list"></ul>
         </div>
       </div>
 
@@ -251,6 +357,26 @@
 
         <!-- ---------------- EXPLORE / VIEW FLOORPLAN VIEW ---------------- -->
         <div class="panel__scroll" id="tab-explore" hidden>
+          <section class="field floorplan-search-field">
+            <label class="field__label" for="explore-search">Search Location</label>
+            <div class="search search--explore">
+              <span class="search__icon" aria-hidden="true">
+                <svg class="ui-icon"><use href="#icon-search"></use></svg>
+              </span>
+              <input
+                id="explore-search"
+                type="search"
+                placeholder="Find room, lab, surau, toilet…"
+                autocomplete="off"
+                spellcheck="false"
+              />
+              <button type="button" class="search__clear" id="explore-search-clear" hidden aria-label="Clear search">
+                <svg class="ui-icon-xs"><use href="#icon-cross"></use></svg>
+              </button>
+              <ul id="explore-results" class="results" hidden></ul>
+            </div>
+          </section>
+
           <section class="field">
             <div class="field__header-row">
               <span class="field__label">Levels</span>
@@ -313,6 +439,19 @@
               </button>
             </div>
             <ul class="legend" id="legend"></ul>
+          </section>
+
+          <section class="explore-report-cta">
+            <button type="button" class="explore-report-btn" id="explore-btn-report">
+              <span class="explore-report-icon">
+                <svg class="ui-icon" aria-hidden="true"><use href="#icon-camera"></use></svg>
+              </span>
+              <div class="explore-report-text">
+                <strong>Found a Broken Facility?</strong>
+                <span>Click here to snap a photo &amp; report what is broken</span>
+              </div>
+              <span class="explore-report-arrow">→</span>
+            </button>
           </section>
 
           <button id="explore-bottom-home" class="ghost ghost--block" style="margin-top: 10px;">
@@ -415,6 +554,9 @@
 
       <!-- Polished Room Info Card -->
       <div class="info" id="info" hidden>
+        <div class="info__handle" id="info-handle" aria-label="Toggle card details" title="Tap to minimize or expand">
+          <span class="info__handle-bar"></span>
+        </div>
         <button class="info__close" id="info-close" aria-label="Close">&times;</button>
         <div class="info__header">
           <span class="info__badge" id="info-badge">Room</span>
@@ -423,11 +565,35 @@
         <h2 class="info__name" id="info-name"></h2>
         <p class="info__eyebrow" id="info-where"></p>
 
-        <div class="info__stats">
-          <div class="stat-pill">
-            <span class="stat-label">Area</span>
-            <strong class="stat-val" id="info-area">0 m²</strong>
+        <!-- Room Issue Alert (shown when room has active broken facility reports) -->
+        <div class="info__issue-alert" id="info-issue-alert" hidden>
+          <div class="issue-alert-content">
+            <span class="issue-alert-icon">⚠️</span>
+            <div class="issue-alert-text">
+              <strong id="info-issue-title">1 Facility Issue Reported</strong>
+              <span id="info-issue-desc">Air Conditioner · Pending Review</span>
+            </div>
           </div>
+          <button type="button" class="issue-alert-btn" id="info-issue-view-btn">View Log</button>
+        </div>
+
+        <!-- Room Photo Reference Card -->
+        <div class="info__photo-card" id="info-photo-card" hidden>
+          <div class="info__photo-wrap" id="info-photo-wrap" role="button" tabindex="0" title="Click to expand photo" aria-label="Room photo preview. Click to view enlarged.">
+            <img class="info__photo" id="info-photo" src="" alt="Room Photo Reference" loading="lazy" />
+            <div class="info__photo-overlay">
+              <span class="info__photo-badge" id="info-photo-badge">
+                <span class="photo-badge-icon">📷</span> Photo Reference
+              </span>
+              <span class="info__photo-hint">
+                <svg class="ui-icon-xs" aria-hidden="true"><use href="#icon-fit"></use></svg>
+                <span>Tap to enlarge</span>
+              </span>
+            </div>
+          </div>
+        </div>
+
+        <div class="info__stats">
           <div class="stat-pill">
             <span class="stat-label">Category</span>
             <strong class="stat-val" id="info-type">-</strong>
@@ -439,6 +605,11 @@
             <svg class="btn-icon" aria-hidden="true"><use href="#icon-compass"></use></svg>
             Directions to here
           </button>
+          <button class="info__report-btn" id="info-report-btn">
+            <svg class="btn-icon" aria-hidden="true"><use href="#icon-camera"></use></svg>
+            <span>Report Broken Facility</span>
+            <span class="info__report-badge">Snap Photo</span>
+          </button>
           <div class="info__btn-row">
             <button class="info__focus" id="info-focus">
               <svg class="btn-icon" aria-hidden="true"><use href="#icon-fit"></use></svg>
@@ -449,6 +620,364 @@
               <span id="share-text">Share</span>
             </button>
           </div>
+        </div>
+      </div>
+
+      <!-- Photo Lightbox Modal -->
+      <div class="photo-lightbox" id="photo-lightbox" hidden>
+        <div class="photo-lightbox__backdrop" id="photo-lightbox-backdrop"></div>
+        <div class="photo-lightbox__dialog" role="dialog" aria-modal="true" aria-labelledby="photo-lightbox-title">
+          <div class="photo-lightbox__header">
+            <div>
+              <div class="photo-lightbox__badge" id="photo-lightbox-badge">Photo Reference</div>
+              <h3 class="photo-lightbox__title" id="photo-lightbox-title">Room Name</h3>
+              <p class="photo-lightbox__subtitle" id="photo-lightbox-subtitle">Location details</p>
+            </div>
+            <button type="button" class="photo-lightbox__close" id="photo-lightbox-close" aria-label="Close photo preview">&times;</button>
+          </div>
+          <div class="photo-lightbox__body">
+            <img class="photo-lightbox__img" id="photo-lightbox-img" src="" alt="Enlarged Room Preview" />
+          </div>
+        </div>
+      </div>
+
+      <!-- ================================================================= -->
+      <!-- Facility Issue Reporting Modal (Snap & Report Broken Facilities)   -->
+      <!-- ================================================================= -->
+      <div class="report-modal" id="facility-report-modal" hidden>
+        <div class="report-modal__backdrop" id="report-modal-backdrop"></div>
+        <div class="report-modal__dialog" role="dialog" aria-modal="true" aria-labelledby="report-modal-title">
+          <header class="report-modal__header">
+            <div class="report-modal__header-info">
+              <div class="report-badge">
+                <span class="report-badge__icon">⚠️</span>
+                <span>FCSIT Facility Helpdesk</span>
+              </div>
+              <h2 class="report-modal__title" id="report-modal-title">Report Broken Facility</h2>
+              <p class="report-modal__subtitle">Snap a photo and describe what is broken for rapid maintenance</p>
+            </div>
+            <button type="button" class="report-modal__close" id="report-modal-close" aria-label="Close report dialog">&times;</button>
+          </header>
+
+          <form class="report-modal__form" id="facility-report-form" novalidate>
+            <!-- 1. Location Selection -->
+            <div class="report-section">
+              <label class="report-section__label">
+                <span>Location / Room</span>
+                <span class="report-section__required">* Required</span>
+              </label>
+
+              <!-- Selected location chip / display -->
+              <div class="report-location-card" id="report-location-card">
+                <div class="report-location-icon">📍</div>
+                <div class="report-location-details">
+                  <div class="report-location-name" id="report-location-name">Select a Room</div>
+                  <div class="report-location-meta" id="report-location-meta">Block · Level</div>
+                </div>
+                <button type="button" class="report-location-change-btn" id="report-location-change-btn">Change Room</button>
+              </div>
+
+              <!-- Location Search Picker -->
+              <div class="report-location-search" id="report-location-search-wrap" hidden>
+                <div class="search search--report">
+                  <span class="search__icon" aria-hidden="true">
+                    <svg class="ui-icon"><use href="#icon-search"></use></svg>
+                  </span>
+                  <input
+                    id="report-search-input"
+                    type="search"
+                    placeholder="Search room (e.g. MM2, Surau, CCNA, DK1)…"
+                    autocomplete="off"
+                    spellcheck="false"
+                  />
+                  <button type="button" class="search__clear" id="report-search-clear" hidden aria-label="Clear location search">
+                    <svg class="ui-icon-xs"><use href="#icon-cross"></use></svg>
+                  </button>
+                  <ul id="report-search-results" class="results" hidden></ul>
+                </div>
+              </div>
+            </div>
+
+            <!-- 2. What Facility is Broken? -->
+            <div class="report-section">
+              <label class="report-section__label">
+                <span>Broken Facility / Equipment</span>
+                <span class="report-section__required">* Select type</span>
+              </label>
+              <div class="facility-grid" id="facility-type-grid">
+                <button type="button" class="facility-chip is-selected" data-type="Air Conditioner" data-icon="❄️">
+                  <span class="facility-chip__icon">❄️</span>
+                  <span class="facility-chip__label">Air Conditioner</span>
+                </button>
+                <button type="button" class="facility-chip" data-type="Projector / Screen" data-icon="📽️">
+                  <span class="facility-chip__icon">📽️</span>
+                  <span class="facility-chip__label">Projector / Screen</span>
+                </button>
+                <button type="button" class="facility-chip" data-type="Lighting &amp; Lamps" data-icon="💡">
+                  <span class="facility-chip__icon">💡</span>
+                  <span class="facility-chip__label">Lighting / Lamp</span>
+                </button>
+                <button type="button" class="facility-chip" data-type="Power Socket" data-icon="🔌">
+                  <span class="facility-chip__icon">🔌</span>
+                  <span class="facility-chip__label">Power Socket</span>
+                </button>
+                <button type="button" class="facility-chip" data-type="Furniture / Desk" data-icon="🪑">
+                  <span class="facility-chip__icon">🪑</span>
+                  <span class="facility-chip__label">Chair / Desk</span>
+                </button>
+                <button type="button" class="facility-chip" data-type="Door / Lock / Window" data-icon="🚪">
+                  <span class="facility-chip__icon">🚪</span>
+                  <span class="facility-chip__label">Door / Lock</span>
+                </button>
+                <button type="button" class="facility-chip" data-type="Computer / Lab PC" data-icon="🖥️">
+                  <span class="facility-chip__icon">🖥️</span>
+                  <span class="facility-chip__label">Lab PC / Screen</span>
+                </button>
+                <button type="button" class="facility-chip" data-type="Toilet / Plumbing" data-icon="🚻">
+                  <span class="facility-chip__icon">🚻</span>
+                  <span class="facility-chip__label">Toilet / Plumbing</span>
+                </button>
+                <button type="button" class="facility-chip" data-type="Water Dispenser" data-icon="🚰">
+                  <span class="facility-chip__icon">🚰</span>
+                  <span class="facility-chip__label">Water Dispenser</span>
+                </button>
+                <button type="button" class="facility-chip" data-type="Other" data-icon="📦">
+                  <span class="facility-chip__icon">📦</span>
+                  <span class="facility-chip__label">Other / General</span>
+                </button>
+              </div>
+            </div>
+
+            <!-- 3. Photo of Broken Facility (Snap a photo) -->
+            <div class="report-section">
+              <div class="report-section__header-row">
+                <label class="report-section__label">
+                  <span>Photo Evidence (Snap Photo)</span>
+                  <span class="report-section__hint">Camera or Upload</span>
+                </label>
+              </div>
+
+              <!-- Live In-Modal Camera Interface -->
+              <div class="camera-live-box" id="camera-live-box" hidden>
+                <div class="camera-video-wrapper">
+                  <video id="camera-live-video" autoplay playsinline muted></video>
+                  <div class="camera-viewfinder-grid"></div>
+                  <div class="camera-flash" id="camera-flash"></div>
+                </div>
+                <div class="camera-controls">
+                  <button type="button" class="camera-ctrl-btn" id="camera-flip-btn" title="Flip camera front/rear">
+                    <svg class="ui-icon"><use href="#icon-refresh"></use></svg>
+                    <span>Flip</span>
+                  </button>
+                  <button type="button" class="camera-shutter-btn" id="camera-shutter-btn" aria-label="Snap photo">
+                    <span class="shutter-inner"></span>
+                  </button>
+                  <button type="button" class="camera-ctrl-btn" id="camera-cancel-btn" title="Close camera">
+                    <svg class="ui-icon"><use href="#icon-cross"></use></svg>
+                    <span>Cancel</span>
+                  </button>
+                </div>
+              </div>
+
+              <!-- Photo Action Buttons (Shown when camera is not streaming) -->
+              <div class="photo-capture-actions" id="photo-capture-actions">
+                <button type="button" class="snap-btn snap-btn--primary" id="btn-start-camera">
+                  <svg class="btn-icon" aria-hidden="true"><use href="#icon-camera"></use></svg>
+                  <span>Snap Photo with Camera</span>
+                </button>
+
+                <label class="snap-btn snap-btn--secondary" for="report-photo-file" id="btn-upload-file">
+                  <svg class="btn-icon" aria-hidden="true"><use href="#icon-fit"></use></svg>
+                  <span>Upload / Device Camera</span>
+                </label>
+                <input type="file" id="report-photo-file" accept="image/*" capture="environment" hidden />
+              </div>
+
+              <!-- Photo Preview Card (Shown after snapping / selecting photo) -->
+              <div class="photo-preview-card" id="photo-preview-card" hidden>
+                <div class="photo-preview-thumb-wrap" id="photo-preview-zoom" role="button" tabindex="0" title="Click to enlarge">
+                  <img id="photo-preview-img" src="" alt="Snapped broken facility preview" />
+                  <span class="photo-preview-badge">✓ Photo Attached</span>
+                </div>
+                <div class="photo-preview-info">
+                  <div class="photo-preview-title" id="photo-preview-title">Broken Facility Photo</div>
+                  <div class="photo-preview-meta" id="photo-preview-meta">Snapped just now</div>
+                  <div class="photo-preview-actions">
+                    <button type="button" class="photo-action-btn" id="photo-retake-btn">
+                      <svg class="ui-icon-xs"><use href="#icon-refresh"></use></svg> Retake
+                    </button>
+                    <button type="button" class="photo-action-btn photo-action-btn--delete" id="photo-remove-btn">
+                      <svg class="ui-icon-xs"><use href="#icon-trash"></use></svg> Remove
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- 4. Issue Description & Details -->
+            <div class="report-section">
+              <label class="report-section__label" for="report-description">
+                <span>Description of Issue</span>
+                <span class="report-section__required">* Details</span>
+              </label>
+              <textarea
+                id="report-description"
+                rows="3"
+                class="report-textarea"
+                placeholder="Describe what is broken (e.g. AC leaking water on PC row 3, projector bulb not turning on, socket broken)..."
+                required
+              ></textarea>
+              <div class="report-quick-tags" id="report-quick-tags">
+                <span class="quick-tags-title">Quick tags:</span>
+                <button type="button" class="tag-chip" data-text="Not turning on / no power">Not powering on</button>
+                <button type="button" class="tag-chip" data-text="Leaking water onto floor">Leaking water</button>
+                <button type="button" class="tag-chip" data-text="Broken / physically damaged">Broken</button>
+                <button type="button" class="tag-chip" data-text="Flickering / unstable">Flickering</button>
+                <button type="button" class="tag-chip" data-text="Safety hazard!">⚠️ Hazard</button>
+              </div>
+            </div>
+
+            <!-- 5. Urgency Level -->
+            <div class="report-section">
+              <label class="report-section__label">Urgency Level</label>
+              <div class="urgency-selector" id="report-urgency-selector">
+                <label class="urgency-option urgency--low">
+                  <input type="radio" name="report-urgency" value="Low" checked />
+                  <span class="urgency-pill">
+                    <span class="urgency-dot"></span>
+                    <span class="urgency-text">Low <small>(Routine)</small></span>
+                  </span>
+                </label>
+                <label class="urgency-option urgency--medium">
+                  <input type="radio" name="report-urgency" value="Medium" />
+                  <span class="urgency-pill">
+                    <span class="urgency-dot"></span>
+                    <span class="urgency-text">Medium <small>(Affects classes)</small></span>
+                  </span>
+                </label>
+                <label class="urgency-option urgency--urgent">
+                  <input type="radio" name="report-urgency" value="Urgent">
+                  <span class="urgency-pill">
+                    <span class="urgency-dot"></span>
+                    <span class="urgency-text">Urgent <small>(Immediate/Hazard)</small></span>
+                  </span>
+                </label>
+              </div>
+            </div>
+
+            <!-- 6. Reporter Info (Optional) -->
+            <div class="report-section report-section--reporter">
+              <div class="report-inline-fields">
+                <div class="report-field">
+                  <label class="report-field__label" for="report-reporter-name">Your Name (Optional)</label>
+                  <input type="text" id="report-reporter-name" class="report-input" placeholder="e.g. Student / Lecturer name" />
+                </div>
+                <div class="report-field">
+                  <label class="report-field__label" for="report-reporter-contact">Email / Phone (Optional)</label>
+                  <input type="text" id="report-reporter-contact" class="report-input" placeholder="For repair updates" />
+                </div>
+              </div>
+            </div>
+
+            <!-- Error message container -->
+            <div class="report-form-error" id="report-form-error" hidden></div>
+
+            <!-- Footer submission -->
+            <div class="report-modal__footer">
+              <button type="button" class="btn-ghost" id="report-cancel-btn">Cancel</button>
+              <button type="submit" class="btn-submit-report" id="report-submit-btn">
+                <svg class="btn-icon" aria-hidden="true"><use href="#icon-check"></use></svg>
+                <span>Submit Facility Report</span>
+              </button>
+            </div>
+          </form>
+        </div>
+      </div>
+
+      <!-- Success Confirmation Modal -->
+      <div class="report-success-modal" id="facility-report-success-modal" hidden>
+        <div class="report-modal__backdrop" id="report-success-backdrop"></div>
+        <div class="report-success-card" role="dialog" aria-modal="true">
+          <div class="success-icon-wrap">
+            <svg class="success-check-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+              <polyline points="20 6 9 17 4 12"></polyline>
+            </svg>
+          </div>
+          <h3 class="success-title">Report Submitted!</h3>
+          <p class="success-subtitle">FCSIT Facility &amp; Maintenance has been notified.</p>
+          <div class="success-ticket" id="success-ticket-id">Ticket #FAC-2026-8491</div>
+
+          <div class="success-summary" id="success-summary-box"></div>
+
+          <div class="success-actions">
+            <button type="button" class="btn-success-primary" id="success-view-map-btn">
+              <span>View Location on Map</span> →
+            </button>
+            <button type="button" class="btn-success-secondary" id="success-view-reports-btn">
+              <span>View All Reports</span>
+            </button>
+            <button type="button" class="btn-success-ghost" id="success-close-btn">
+              Close
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Facility Reports Log / History Modal -->
+      <div class="reports-list-modal" id="facility-reports-list-modal" hidden>
+        <div class="report-modal__backdrop" id="reports-list-backdrop"></div>
+        <div class="reports-list-dialog" role="dialog" aria-modal="true" aria-labelledby="reports-list-title">
+          <header class="reports-list-header">
+            <div class="reports-list-header__left">
+              <div class="report-badge" id="reports-role-badge">
+                <span class="report-badge__icon" id="reports-role-icon">🛡️</span>
+                <span id="reports-role-badge-text">Administrator View</span>
+              </div>
+              <h2 class="reports-list-title" id="reports-list-title">Facility Activity Log</h2>
+              <p class="reports-list-subtitle" id="reports-list-subtitle">Master activity log · All campus reports &amp; maintenance</p>
+            </div>
+            <div class="reports-list-header__actions">
+              <button type="button" class="btn-role-switch" id="btn-toggle-role" title="Toggle between Administrator view and Student/User view">
+                <span class="role-switch-icon" id="role-switch-icon">👤</span>
+                <span id="role-switch-text">Switch to User View</span>
+              </button>
+              <button type="button" class="report-modal__close" id="reports-list-close" aria-label="Close reports list">&times;</button>
+            </div>
+          </header>
+
+          <div class="reports-list-toolbar">
+            <div class="reports-filter-tabs" id="reports-filter-tabs">
+              <button type="button" class="filter-tab is-active" data-filter="all">All (<span id="reports-count-all">0</span>)</button>
+              <button type="button" class="filter-tab" data-filter="pending">Pending (<span id="reports-count-pending">0</span>)</button>
+              <button type="button" class="filter-tab" data-filter="resolved">Resolved (<span id="reports-count-resolved">0</span>)</button>
+            </div>
+            <button type="button" class="btn-new-report-sm" id="btn-list-new-report">
+              + Report New Issue
+            </button>
+          </div>
+
+          <div class="reports-list-body" id="reports-list-body"></div>
+        </div>
+      </div>
+
+      <!-- Administrator Passcode Verification Modal -->
+      <div class="admin-auth-modal" id="admin-auth-modal" hidden>
+        <div class="report-modal__backdrop" id="admin-auth-backdrop"></div>
+        <div class="admin-auth-card" role="dialog" aria-modal="true" aria-labelledby="admin-auth-title">
+          <div class="admin-auth-icon">🛡️</div>
+          <h3 class="admin-auth-title" id="admin-auth-title">Administrator Access</h3>
+          <p class="admin-auth-subtitle">Enter administrator passcode to access full campus activity logs and issue resolution.</p>
+          <form id="admin-auth-form">
+            <div class="admin-auth-input-wrap">
+              <input type="password" id="admin-passcode-input" class="admin-auth-input" placeholder="Enter admin passcode" autocomplete="current-password" autofocus />
+            </div>
+            <p class="admin-auth-hint">💡 Default passcode: <code>admin</code></p>
+            <div class="admin-auth-error" id="admin-auth-error" hidden></div>
+            <div class="admin-auth-actions">
+              <button type="button" class="btn-ghost" id="admin-auth-cancel">Cancel</button>
+              <button type="submit" class="btn-admin-login" id="admin-auth-submit">Verify &amp; Unlock</button>
+            </div>
+          </form>
         </div>
       </div>
 

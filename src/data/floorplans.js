@@ -61,8 +61,10 @@ const blockALevel1 = {
     { name: 'Office', poly: r(300, 268, 577, 440), doors: [[2, 0.12], [2, 0.9]] },
     { name: 'Office', poly: r(577, 268, 805, 560), doors: [[2, 0.22]] },
     { name: 'Lobby', poly: r(300, 445, 577, 738), open: true },
-    { name: 'Bilik Kuliah 1', code: 'BK1', poly: r(80, 605, 300, 855), doors: [[0, 0.85], [1, 0.55]] },
+    { name: 'Exit (to Block B)', poly: r(80, 560, 300, 605), open: true, note: 'Exit to Block B' },
+    { name: 'Bilik Kuliah 1', code: 'BK1', photo: '/rooms/bk1.png', poly: r(80, 605, 300, 855), doors: [[0, 0.85], [1, 0.55]] },
     { name: 'The Cube', poly: r(577, 605, 805, 855), doors: [[0, 0.14], [3, 0.16]] },
+    { name: 'Exit', poly: r(577, 560, 805, 605), open: true, note: 'Exit between The Cube and Office' },
     { name: 'Stairs', poly: r(330, 742, 550, 862) },
     { name: "Ladies' Toilet", poly: r(80, 862, 185, 1010), doors: [[0, 0.68]] },
     { name: "Men's Toilet", poly: r(185, 880, 300, 1010), doors: [[0, 0.3]] },
@@ -78,10 +80,10 @@ const blockALevel2 = {
     [805, 1010], [80, 1010], [80, 690], [63, 690], [63, 600], [80, 600],
   ]),
   rooms: [
-    { name: 'CCNA Lab', poly: r(85, 262, 305, 515), doors: [[1, 0.14], [2, 0.86]] },
-    { name: 'Makmal Mikro 2', code: 'MM2', poly: r(350, 262, 452, 500), doors: [[0, 0.28], [2, 0.28]] },
+    { name: 'CCNA Lab', code: 'CCNA', photo: '/rooms/ccna-lab.png', poly: r(85, 262, 305, 515), doors: [[1, 0.14], [2, 0.86]] },
+    { name: 'Makmal Mikro 2', code: 'MM2', photo: '/rooms/mm2.png', poly: r(350, 262, 452, 500), doors: [[0, 0.28], [2, 0.28]] },
     { name: 'Makmal Lanjutan', code: 'ML', poly: r(455, 262, 557, 500), doors: [[0, 0.72], [2, 0.72]] },
-    { name: 'Makmal Mikro 1', code: 'MM1', poly: r(600, 262, 805, 510), doors: [[0, 0.08], [2, 0.08]] },
+    { name: 'Makmal Mikro 1', code: 'MM1', photo: '/rooms/mm1.png', poly: r(600, 262, 805, 510), doors: [[0, 0.08], [2, 0.08]] },
     { name: 'Bridge Landing', poly: r(90, 550, 305, 600), open: true, note: 'Bridge to Block B' },
     { name: 'Postgraduate Lounge', poly: r(105, 605, 305, 870), doors: [[0, 0.9], [1, 0.55]] },
     { name: 'Stairs', poly: r(63, 600, 105, 690) },
@@ -112,7 +114,7 @@ const blockALevel3 = {
     { name: 'Seminar Room 1', code: 'BS1', poly: r(500, 790, 580, 880), doors: [[2, 0.5]], note: 'Bilik Seminar 1' },
     { name: "Men's Toilet", poly: r(95, 885, 190, 940), doors: [[1, 0.5]] },
     { name: 'Surau (Mens)', poly: r(95, 940, 250, 1010), doors: [[0, 0.9]] },
-    { name: 'Bilik Kuliah 2', code: 'BK2', poly: r(640, 885, 805, 1010), doors: [[3, 0.3]] },
+    { name: 'Bilik Kuliah 2', code: 'BK2', photo: '/rooms/bk2.png', poly: r(640, 885, 805, 1010), doors: [[3, 0.3]] },
   ],
 };
 
@@ -135,11 +137,11 @@ const blockBLevel1 = {
     { name: 'Makmal Mikro 4', code: 'MM4', poly: r(305, 210, 355, 292), doors: [[2, 0.5]] },
     { name: 'Makmal Mikro 3', code: 'MM3', poly: r(358, 210, 410, 292), doors: [[2, 0.5]] },
     { name: 'Stairs', poly: r(415, 130, 470, 185) },
-    { name: 'Exit to Bus Stop KK8', poly: r(470, 130, 520, 185), open: true, note: 'Exit to Bus Stop KK8' },
+    { name: 'Entrance from KK8 Bus Stop', poly: r(470, 130, 520, 185), open: true, note: 'Entrance / Exit from KK8 Bus Stop' },
     { name: 'Makmal Mikro 5', code: 'MM5', poly: r(520, 145, 652, 215), doors: [[3, 0.5]], note: 'MM5' },
     { name: "Men's Toilet", poly: r(520, 215, 652, 292), doors: [[3, 0.5]] },
-    { name: "Ladies' Toilet", poly: r(485, 320, 640, 378), doors: [[1, 0.5]] },
-    { name: 'Bilik Teknikal', poly: r(485, 378, 640, 432), doors: [[1, 0.5]] },
+    { name: "Ladies' Toilet", poly: r(485, 320, 640, 378), doors: [[3, 0.5]] },
+    { name: 'Bilik Teknikal', poly: r(485, 378, 640, 432), doors: [[3, 0.5]] },
     { name: 'Lecturer Rooms', poly: r(780, 145, 1000, 218), doors: [[3, 0.5]] },
     { name: 'Makmal Mikro 6', code: 'MM6', poly: r(780, 218, 1000, 292), doors: [[3, 0.5]] },
     { name: 'Exit (to Block A)', poly: r(880, 292, 1000, 335), open: true, note: 'Exit to Block A' },
@@ -169,13 +171,13 @@ const blockBLevel1 = {
     },
     { name: 'Side Entrance', poly: r(415, 454, 470, 565), open: true, note: 'Side Entrance' },
     { name: 'Exit', poly: r(415, 565, 470, 590), open: true, note: 'Exit to Outside' },
-    { name: 'Lift', poly: r(475, 518, 515, 556) },
-    { name: 'Stairs', poly: r(520, 505, 580, 562) },
+    { name: 'Stairs', poly: r(540, 470, 610, 545) },
+    { name: 'Lift', poly: r(475, 480, 535, 540) },
     {
       name: 'Dewan Kuliah 2',
       code: 'DK2',
       poly: poly([[150, 210], [302, 210], [302, 454]], arcInner(141, 198)),
-      doors: [[2, 0.8]],
+      doors: [[1, 0.5]],
     },
     {
       name: 'Landscape',
@@ -188,7 +190,7 @@ const blockBLevel1 = {
       name: 'Dewan Kuliah 1',
       code: 'DK1',
       poly: poly([[415, 454]], arcInner(141, 105, 10), [[337, 590], [415, 590]]),
-      doors: [[0, 0.9]],
+      doors: [[13, 0.5]],
     },
     { name: 'Bilik Tutorial 5', code: 'BT5', poly: bt(195, 177) },
     { name: 'Bilik Tutorial 4', code: 'BT4', poly: bt(177, 159) },
@@ -253,9 +255,49 @@ export const BUILDINGS = [
   },
 ];
 
-/** The covered link connecting Block A level 2 to Block B level 3. */
-export const BRIDGE = {
-  name: 'Bridge · Block A ↔ Block B',
-  poly: r(-160, 553, 80, 596),
-  elevation: FLOOR_HEIGHT,
-};
+/** The covered links connecting Block A and Block B. */
+export const BRIDGES = [
+  {
+    id: 'bridge-upper',
+    name: 'Bridge · Block A Level 2 ↔ Block B Level 3',
+    poly: r(-160, 553, 80, 596),
+    elevation: FLOOR_HEIGHT,
+    levels: ['A2', 'B3'],
+  },
+  {
+    id: 'bridge-ground',
+    name: 'Bridge · Block A Level 1 ↔ Block B Level 1',
+    poly: [
+      [-40, 420],
+      [80, 560],
+      [80, 605],
+      [-40, 463],
+    ],
+    elevation: 0,
+    levels: ['A1', 'B1'],
+  },
+];
+
+export const BRIDGE = BRIDGES[0];
+
+/**
+ * Resolves the appropriate reference photo URL for a given room.
+ * Strictly respects only the 5 user-provided images for MM1, MM2, CCNA Lab, BK1, and BK2.
+ * Leaves all other locations blank (returns null).
+ */
+export function getRoomPhoto(room) {
+  if (!room) return null;
+  if (room.photo) return room.photo;
+  const name = (room.name || '').toLowerCase();
+  const code = (room.code || '').toLowerCase();
+
+  // User-uploaded verified locations ONLY:
+  if (code === 'mm1' || /\bmakmal mikro 1\b|\bmikro 1\b/i.test(name)) return '/rooms/mm1.png';
+  if (code === 'mm2' || /\bmakmal mikro 2\b|\bmikro 2\b/i.test(name)) return '/rooms/mm2.png';
+  if (code === 'ccna' || /\bccna\b/i.test(name)) return '/rooms/ccna-lab.png';
+  if (code === 'bk1' || /\bbilik kuliah 1\b|\bkuliah 1\b/i.test(name)) return '/rooms/bk1.png';
+  if (code === 'bk2' || /\bbilik kuliah 2\b|\bkuliah 2\b/i.test(name)) return '/rooms/bk2.png';
+
+  return null;
+}
+

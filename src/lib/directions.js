@@ -49,6 +49,45 @@ export function setupDirections(app) {
     activeEntranceId: null,
   };
 
+  function getDefaultOrigin() {
+    // 1. Look for Entrance from KK8 Bus Stop in graph.entrances
+    const kk8Entrance = graph.entrances.find((e) => /kk8|bus stop/i.test(e.name));
+    // 2. Look for room matching kk8 in campus.rooms
+    const kk8Room = campus.rooms.find(
+      (r) => /kk8|bus stop/i.test(r.name) || /kk8|bus stop/i.test(r.note ?? '')
+    );
+
+    if (kk8Entrance) {
+      return {
+        id: kk8Entrance.id,
+        label: kk8Entrance.name,
+        sublabel: kk8Entrance.levelName,
+      };
+    }
+    if (kk8Room) {
+      return {
+        id: kk8Room.navNode,
+        label: label(kk8Room),
+        sublabel: `${kk8Room.building.name} · ${kk8Room.level.name}`,
+      };
+    }
+    if (graph.entrances[0]) {
+      return {
+        id: graph.entrances[0].id,
+        label: graph.entrances[0].name,
+        sublabel: graph.entrances[0].levelName,
+      };
+    }
+    return null;
+  }
+
+  const defaultOrigin = getDefaultOrigin();
+  if (defaultOrigin) {
+    state.origin = { ...defaultOrigin };
+    if (dom.origin) dom.origin.value = defaultOrigin.label;
+    if (dom.originClear) dom.originClear.hidden = false;
+  }
+
   const destinations = campus.rooms
     .filter((room) => room.category !== 'circulation' || /entrance|lobby|foyer/i.test(room.name))
     .map((room) => ({
@@ -116,7 +155,14 @@ export function setupDirections(app) {
 
     let newDest = null;
     if (prevOrigin) {
-      newDest = campus.rooms.find((r) => r.navNode === prevOrigin.id) || null;
+      newDest =
+        campus.rooms.find((r) => r.navNode === prevOrigin.id) ||
+        campus.rooms.find(
+          (r) =>
+            r.name.toLowerCase() === prevOrigin.label.toLowerCase() ||
+            (prevOrigin.label && r.name.toLowerCase().includes('kk8'))
+        ) ||
+        null;
     }
 
     let newOrigin = null;
@@ -283,20 +329,91 @@ export function setupDirections(app) {
       `</span>` +
       (state.stepFree ? '<span class="warn">Step-free route (lifts only)</span>' : '');
 
-    renderSteps(describeRoute(route));
+    currentRoute = route;
+    renderSteps(describeRoute(route, { startLabel, endLabel }));
 
     if (app.onRouteShown) {
       app.onRouteShown(route, { frame });
     }
   }
 
+  let currentRoute = null;
+  let currentSteps = [];
+  let activeStepIndex = null;
+
+  dom.routeSummary?.addEventListener('click', () => {
+    clearStepSelection();
+    if (app.onShowFullRoute) {
+      app.onShowFullRoute();
+    }
+  });
+
+  function clearStepSelection() {
+    activeStepIndex = null;
+    const items = dom.steps.querySelectorAll('.step-item');
+    items.forEach((item) => {
+      item.classList.remove('is-active');
+      const b = item.querySelector('.step-btn');
+      b?.classList.remove('is-active');
+      b?.removeAttribute('aria-current');
+    });
+  }
+
   function renderSteps(steps) {
+    currentSteps = steps;
+    activeStepIndex = null;
     dom.steps.replaceChildren();
-    for (const step of steps) {
+
+    steps.forEach((step, index) => {
       const li = document.createElement('li');
-      li.textContent = step.text;
+      li.className = 'step-item';
       if (step.icon) li.dataset.icon = step.icon;
+
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'step-btn';
+      btn.setAttribute('aria-label', `Step ${index + 1}: ${step.text}`);
+
+      const floorBadge = step.levelBadge
+        ? `<span class="step-floor-pill" title="Level ${step.levelBadge}">${escapeHtml(step.levelBadge)}</span>`
+        : '';
+
+      btn.innerHTML = `
+        <span class="step-btn-body">
+          <span class="step-text">${escapeHtml(step.text)}</span>
+        </span>
+        ${floorBadge}
+      `;
+
+      btn.addEventListener('click', () => {
+        selectStep(index);
+      });
+
+      li.append(btn);
       dom.steps.append(li);
+    });
+  }
+
+  function selectStep(index) {
+    if (index < 0 || index >= currentSteps.length) return;
+    activeStepIndex = index;
+    const step = currentSteps[index];
+
+    const items = dom.steps.querySelectorAll('.step-item');
+    items.forEach((item, idx) => {
+      const isCurrent = idx === index;
+      item.classList.toggle('is-active', isCurrent);
+      const b = item.querySelector('.step-btn');
+      b?.classList.toggle('is-active', isCurrent);
+      if (isCurrent) {
+        b?.setAttribute('aria-current', 'step');
+      } else {
+        b?.removeAttribute('aria-current');
+      }
+    });
+
+    if (app.onStepSelected) {
+      app.onStepSelected(step, index);
     }
   }
 
@@ -309,8 +426,8 @@ export function setupDirections(app) {
       const li = document.createElement('li');
       const button = document.createElement('button');
       const active =
-        !state.origin &&
-        (state.activeEntranceId ? state.activeEntranceId === entrance.id : i === 0);
+        state.origin?.id === entrance.id ||
+        (!state.origin && (state.activeEntranceId ? state.activeEntranceId === entrance.id : i === 0));
 
       if (active) button.className = 'is-active';
       const minutes = Math.max(1, Math.round(route.seconds / 60));
@@ -321,10 +438,14 @@ export function setupDirections(app) {
         `<span class="cost">${minutes} min<small>${Math.round(route.metres)} m</small></span>`;
 
       button.addEventListener('click', () => {
-        state.origin = null;
+        state.origin = {
+          id: entrance.id,
+          label: entrance.name,
+          sublabel: entrance.levelName,
+        };
         state.activeEntranceId = entrance.id;
-        if (dom.origin) dom.origin.value = '';
-        if (dom.originClear) dom.originClear.hidden = true;
+        if (dom.origin) dom.origin.value = entrance.name;
+        if (dom.originClear) dom.originClear.hidden = false;
         recompute({ frame: true });
       });
 
@@ -337,13 +458,23 @@ export function setupDirections(app) {
     return room.code ? `${room.name} (${room.code})` : room.name;
   }
 
-  function clearRoute() {
+  function clearRoute(resetToDefault = true) {
     state.destination = null;
+    currentRoute = null;
+    currentSteps = [];
+    activeStepIndex = null;
+    if (app.onStepCleared) app.onStepCleared();
     if (dom.dest) dom.dest.value = '';
     if (dom.destClear) dom.destClear.hidden = true;
-    state.origin = null;
-    if (dom.origin) dom.origin.value = '';
-    if (dom.originClear) dom.originClear.hidden = true;
+    if (resetToDefault && defaultOrigin) {
+      state.origin = { ...defaultOrigin };
+      if (dom.origin) dom.origin.value = defaultOrigin.label;
+      if (dom.originClear) dom.originClear.hidden = false;
+    } else {
+      state.origin = null;
+      if (dom.origin) dom.origin.value = '';
+      if (dom.originClear) dom.originClear.hidden = true;
+    }
     recompute({ frame: false });
   }
 
@@ -352,11 +483,24 @@ export function setupDirections(app) {
       state.destination = room;
       if (dom.dest) dom.dest.value = label(room);
       if (dom.destClear) dom.destClear.hidden = false;
+      if (!state.origin && defaultOrigin) {
+        state.origin = { ...defaultOrigin };
+        if (dom.origin) dom.origin.value = defaultOrigin.label;
+        if (dom.originClear) dom.originClear.hidden = false;
+      }
       recompute({ frame: true });
     },
     clear: clearRoute,
     refresh() {
       recompute({ frame: false });
+    },
+    selectStep,
+    clearStepSelection,
+    getActiveStep() {
+      return activeStepIndex !== null ? currentSteps[activeStepIndex] : null;
+    },
+    getActiveRoute() {
+      return currentRoute;
     },
     hasRoute() {
       return Boolean(state.destination);

@@ -51,11 +51,14 @@ export function buildNavGraph(campus) {
     const [ox, oz] = plan.world || !level ? [0, 0] : level.building.origin;
 
     for (const [name, [x, y, opts = {}]] of Object.entries(plan.nodes)) {
+      const lvl = levelsByKey.get(plan.elevationLevel ?? levelKey);
+      const levelName = lvl ? `${lvl.building?.name ?? ''} · ${lvl.name ?? ''}`.replace(/^ · /, '') : '';
       const node = add({
         id: `${levelKey}:${name}`,
         x: x + ox,
         z: y + oz,
         levelKey: plan.elevationLevel ?? levelKey,
+        levelName,
         planKey: levelKey,
         kind: opts.entrance ? 'entrance' : opts.link ? 'connector' : 'corridor',
         name: opts.entrance ?? name,
@@ -84,17 +87,34 @@ export function buildNavGraph(campus) {
       .map((node) => ({ node, elevation: levelsByKey.get(node.levelKey).restY }))
       .sort((a, b) => a.elevation - b.elevation);
 
-    for (let i = 0; i < ordered.length - 1; i++) {
-      const lower = ordered[i];
-      const upper = ordered[i + 1];
-      const rise = upper.elevation - lower.elevation;
-      const climb = meta.kind === 'lift' ? LIFT_CLIMB_COST : STAIR_CLIMB_COST;
-      const wait = meta.kind === 'lift' ? LIFT_WAIT_COST : 0;
-      connect(lower.node.id, upper.node.id, distance(lower.node, upper.node) + rise * climb + wait, {
-        kind: meta.kind,
-        label: meta.label,
-        stepFree: meta.kind === 'lift',
-      });
+    if (meta.kind === 'lift') {
+      // Passengers in an elevator can ride directly between any two floors served by the shaft
+      for (let i = 0; i < ordered.length; i++) {
+        for (let j = i + 1; j < ordered.length; j++) {
+          const lower = ordered[i];
+          const upper = ordered[j];
+          const rise = Math.abs(upper.elevation - lower.elevation);
+          const climb = LIFT_CLIMB_COST;
+          const wait = LIFT_WAIT_COST;
+          connect(lower.node.id, upper.node.id, distance(lower.node, upper.node) + rise * climb + wait, {
+            kind: 'lift',
+            label: meta.label,
+            stepFree: true,
+          });
+        }
+      }
+    } else {
+      for (let i = 0; i < ordered.length - 1; i++) {
+        const lower = ordered[i];
+        const upper = ordered[i + 1];
+        const rise = upper.elevation - lower.elevation;
+        const climb = STAIR_CLIMB_COST;
+        connect(lower.node.id, upper.node.id, distance(lower.node, upper.node) + rise * climb, {
+          kind: meta.kind,
+          label: meta.label,
+          stepFree: false,
+        });
+      }
     }
   }
 
@@ -357,23 +377,43 @@ function turnPhrase(delta) {
 /** Converts a route into readable steps, one per turn or level change. */
 export function describeRoute(route, { startLabel, endLabel }) {
   const { path, edges } = route;
-  const steps = [];
+  const rawSteps = [];
   let run = 0;
   let heading = null;
   let pending = `Start at ${startLabel}`;
+  let stepStartNode = path[0];
 
-  const flush = (extra) => {
+  const flush = (extra, nextStartNode) => {
     if (run > 0.8) {
       const metres = Math.round(run);
-      steps.push({
+      const text = `${pending}${pending.endsWith(',') ? '' : ','} head ${compass(heading)} for ${metres} m.`;
+      const short = pending.startsWith('Start')
+        ? `Start (${metres} m)`
+        : `${pending.replace(/,\s*$/, '')} (${metres} m)`;
+      rawSteps.push({
         icon: 'walk',
-        text: `${pending}${pending.endsWith(',') ? '' : ','} head ${compass(heading)} for ${metres} m.`,
+        text,
+        shortText: short,
+        levelKey: stepStartNode?.levelKey,
+        levelBadge: stepStartNode?.levelKey ?? '',
+        position: stepStartNode ? { x: stepStartNode.x, z: stepStartNode.z } : null,
       });
     } else if (pending && pending !== 'Continue') {
-      steps.push({ icon: 'walk', text: `${pending}.` });
+      const clean = pending.replace(/[,\s]+$/, '');
+      if (clean && !/^leaving the/i.test(clean)) {
+        rawSteps.push({
+          icon: 'walk',
+          text: `${clean}.`,
+          shortText: clean,
+          levelKey: stepStartNode?.levelKey,
+          levelBadge: stepStartNode?.levelKey ?? '',
+          position: stepStartNode ? { x: stepStartNode.x, z: stepStartNode.z } : null,
+        });
+      }
     }
     run = 0;
     pending = extra ?? 'Continue';
+    if (nextStartNode) stepStartNode = nextStartNode;
   };
 
   for (let i = 0; i < edges.length; i++) {
@@ -382,26 +422,44 @@ export function describeRoute(route, { startLabel, endLabel }) {
     const edge = edges[i];
 
     if (edge.kind === 'stairs' || edge.kind === 'lift') {
-      flush();
+      flush(null, from);
       const fromLevel = levelLabel(from);
       const toLevel = levelLabel(to);
       const up = to.levelKey !== from.levelKey && levelRank(to) > levelRank(from);
-      steps.push({
+      const isLift = edge.kind === 'lift';
+      const labelName = edge.label ?? (isLift ? 'the lift' : 'the stairs');
+      rawSteps.push({
         icon: edge.kind,
-        text: `Take ${edge.label ?? (edge.kind === 'lift' ? 'the lift' : 'the stairs')} ${
-          up ? 'up' : 'down'
-        } from ${fromLevel} to ${toLevel}.`,
+        text: `Take ${labelName} ${up ? 'up' : 'down'} from ${fromLevel} to ${toLevel}.`,
+        shortText: `${isLift ? 'Lift' : 'Stairs'} ${up ? 'up' : 'down'} to ${to.levelKey}`,
+        levelKey: from.levelKey,
+        toLevelKey: to.levelKey,
+        levelBadge: `${from.levelKey} → ${to.levelKey}`,
+        position: { x: from.x, z: from.z },
+        toPosition: { x: to.x, z: to.z },
       });
       heading = null;
-      pending = 'Leaving the ' + (edge.kind === 'lift' ? 'lift' : 'stairs') + ',';
+      pending = 'Leaving the ' + (isLift ? 'lift' : 'stairs') + ',';
+      stepStartNode = to;
       continue;
     }
 
     if (edge.kind === 'bridge') {
-      flush();
-      steps.push({ icon: 'bridge', text: `Cross ${edge.label ?? 'the bridge'}.` });
+      flush(null, from);
+      const bridgeLabel = edge.label ?? 'the bridge';
+      rawSteps.push({
+        icon: 'bridge',
+        text: `Cross ${bridgeLabel}.`,
+        shortText: `Cross ${bridgeLabel}`,
+        levelKey: from.levelKey,
+        toLevelKey: to.levelKey,
+        levelBadge: `${from.levelKey} → ${to.levelKey}`,
+        position: { x: from.x, z: from.z },
+        toPosition: { x: to.x, z: to.z },
+      });
       heading = null;
       pending = 'On the other side,';
+      stepStartNode = to;
       continue;
     }
 
@@ -411,23 +469,35 @@ export function describeRoute(route, { startLabel, endLabel }) {
     if (heading === null) {
       heading = segmentBearing;
       run = length;
+      stepStartNode = from;
       continue;
     }
 
     const turn = turnPhrase(normalise(segmentBearing - heading));
     if (turn) {
-      flush(`${turn[0].toUpperCase()}${turn.slice(1)},`);
+      flush(`${turn[0].toUpperCase()}${turn.slice(1)},`, from);
       heading = segmentBearing;
       run = length;
+      stepStartNode = from;
     } else {
       run += length;
     }
   }
 
-  flush();
-  if (steps.length && steps[steps.length - 1].text.startsWith('Continue')) steps.pop();
-  steps.push({ icon: 'flag', text: `Arrive at ${endLabel}.` });
-  return steps;
+  flush(null, path[path.length - 1]);
+  if (rawSteps.length && rawSteps[rawSteps.length - 1].text.startsWith('Continue')) rawSteps.pop();
+
+  const endNode = path[path.length - 1];
+  rawSteps.push({
+    icon: 'flag',
+    text: `Arrive at ${endLabel}.`,
+    shortText: `Arrive at ${endLabel}`,
+    levelKey: endNode?.levelKey,
+    levelBadge: endNode?.levelKey ?? '',
+    position: endNode ? { x: endNode.x, z: endNode.z } : null,
+  });
+
+  return rawSteps;
 }
 
 function levelLabel(node) {

@@ -6,7 +6,8 @@ import { buildCampus } from './lib/build.js';
 import { buildNavGraph } from './lib/graph.js';
 import { RouteLayer } from './lib/route3d.js';
 import { setupDirections } from './lib/directions.js';
-import { CATEGORIES, PLAN_SCALE } from './data/floorplans.js';
+import { CATEGORIES, PLAN_SCALE, getRoomPhoto } from './data/floorplans.js';
+import { createFacilityReportManager } from './lib/facilityReports.js';
 
 const canvas = document.getElementById('scene');
 const labelLayer = document.getElementById('labels');
@@ -97,6 +98,7 @@ const state = {
   shadows: true,
   selected: null,
   hovered: null,
+  focusedStep: null,
 };
 
 // ---------------------------------------------------------------- camera tween
@@ -123,26 +125,62 @@ function flyTo(position, target, duration = 0.85) {
 
 const easeInOut = (x) => (x < 0.5 ? 4 * x * x * x : 1 - (-2 * x + 2) ** 3 / 2);
 
+let currentTab = 'home';
+
 // ---------------------------------------------------------------- layout
 
 function applyLayout() {
   const gap = state.mode === 'explode' ? state.spread * 900 : 0;
 
+  // When actively viewing a route in directions mode, isolate the route's passing floors!
+  const isRouting =
+    currentTab === 'directions' &&
+    state.routeLevelKeys instanceof Set &&
+    state.routeLevelKeys.size > 0;
+
+  // If a specific route step is currently focused, isolate its floor(s) so upper floors never block the view!
+  let stepVisibleLevels = null;
+  if (isRouting && state.focusedStep) {
+    const s = state.focusedStep;
+    stepVisibleLevels = new Set([s.levelKey]);
+    if (s.toLevelKey) stepVisibleLevels.add(s.toLevelKey);
+  }
+
   for (const level of campus.levels) {
     level.group.position.y = level.restY + gap * level.rank;
-    const visible =
-      state.mode === 'single'
-        ? level.key === state.activeLevel
-        : !state.hiddenLevels.has(level.key);
+    const visible = isRouting
+      ? (stepVisibleLevels ? stepVisibleLevels.has(level.key) : state.routeLevelKeys.has(level.key))
+      : state.mode === 'single'
+      ? level.key === state.activeLevel
+      : !state.hiddenLevels.has(level.key);
     level.group.visible = visible;
   }
 
-  campus.bridge.position.y =
-    campus.bridge.userData.restY + gap * campus.bridge.userData.rank;
-  campus.bridge.visible =
-    state.mode === 'single'
-      ? state.activeLevel === 'A2' || state.activeLevel === 'B3'
-      : !state.hiddenLevels.has('A2') && !state.hiddenLevels.has('B3');
+  const bridges = campus.bridges || (campus.bridge ? [campus.bridge] : []);
+  for (const b of bridges) {
+    b.position.y = b.userData.restY + gap * b.userData.rank;
+    const [l1, l2] = b.userData.levels || ['A2', 'B3'];
+    const bridgeVisible = isRouting
+      ? (stepVisibleLevels ? stepVisibleLevels.has(l1) && stepVisibleLevels.has(l2) : state.routeLevelKeys.has(l1) && state.routeLevelKeys.has(l2))
+      : state.mode === 'single'
+      ? state.activeLevel === l1 || state.activeLevel === l2
+      : !state.hiddenLevels.has(l1) && !state.hiddenLevels.has(l2);
+    b.visible = bridgeVisible;
+  }
+
+  const levelA1 = campus.levels.find((l) => l.key === 'A1');
+  const levelB1 = campus.levels.find((l) => l.key === 'B1');
+  if (campus.groundBridge && levelA1 && levelB1) {
+    const yA = levelA1.group.position.y;
+    const yB = levelB1.group.position.y;
+    campus.groundBridge.update(yA, yB);
+    const visible = isRouting
+      ? (stepVisibleLevels ? stepVisibleLevels.has('A1') && stepVisibleLevels.has('B1') : state.routeLevelKeys.has('A1') && state.routeLevelKeys.has('B1'))
+      : state.mode === 'single'
+      ? state.activeLevel === 'A1' || state.activeLevel === 'B1'
+      : !state.hiddenLevels.has('A1') && !state.hiddenLevels.has('B1');
+    campus.groundBridge.group.visible = visible;
+  }
 
   const isCatFiltered = state.selectedCategories.size > 0;
   for (const room of campus.rooms) {
@@ -166,7 +204,9 @@ function updateShadowCatcher() {
     if (!level.group.visible) continue;
     lowest = Math.min(lowest, level.group.position.y);
   }
-  if (!Number.isFinite(lowest)) lowest = 0;
+  const hasVisible = Number.isFinite(lowest) && lowest !== Infinity;
+  shadowCatcher.visible = hasVisible;
+  if (!hasVisible) lowest = 0;
   shadowCatcher.position.y = lowest * PLAN_SCALE - 0.06;
   grid.position.y = shadowCatcher.position.y - 0.01;
 }
@@ -176,19 +216,39 @@ function updateShadowCatcher() {
 const box = new THREE.Box3();
 const sphere = new THREE.Sphere();
 
-/** Gets screen space (px) occupied by the panel. */
+/** Gets screen space (px) occupied by the panel and info card. */
 function getPanelOcclusion() {
   if (currentTab === 'home') {
-    return { left: 0, bottom: 0 };
+    return { left: 0, right: 0, bottom: 0 };
   }
+
+  let left = 0;
+  let right = 0;
+  let bottom = 0;
+
   const panelEl = document.querySelector('.panel');
-  if (!panelEl) return { left: 0, bottom: 0 };
-  const rect = panelEl.getBoundingClientRect();
-  if (window.innerWidth <= 768) {
-    return { left: 0, bottom: window.innerHeight - rect.top + 10 };
-  } else {
-    return { left: rect.right + 24, bottom: 0 };
+  if (panelEl && !panelEl.classList.contains('is-collapsed') && !panelEl.classList.contains('is-hidden') && !panelEl.hidden) {
+    const rect = panelEl.getBoundingClientRect();
+    if (window.innerWidth <= 768) {
+      bottom = Math.max(0, window.innerHeight - rect.top + 10);
+    } else {
+      left = Math.max(0, rect.right + 20);
+    }
   }
+
+  // Account for floating room info card on bottom-right
+  const infoEl = document.getElementById('info');
+  if (infoEl && !infoEl.hidden) {
+    const infoRect = infoEl.getBoundingClientRect();
+    if (window.innerWidth <= 768) {
+      bottom = Math.max(bottom, window.innerHeight - infoRect.top + 12);
+    } else {
+      right = Math.max(0, window.innerWidth - infoRect.left + 20);
+      bottom = Math.max(bottom, window.innerHeight - infoRect.top + 12);
+    }
+  }
+
+  return { left, right, bottom };
 }
 
 function visibleBounds() {
@@ -205,7 +265,7 @@ function visibleBounds() {
 /** Distance at which a sphere of `radius` fits comfortably. */
 function distanceFor(radius) {
   const occ = getPanelOcclusion();
-  const usableW = Math.max(260, window.innerWidth - occ.left - 40);
+  const usableW = Math.max(260, window.innerWidth - occ.left - occ.right - 40);
   const usableH = Math.max(260, window.innerHeight - occ.bottom - 40);
   const fovV = THREE.MathUtils.degToRad(camera.fov);
   const fovH = 2 * Math.atan(Math.tan(fovV / 2) * (usableW / usableH));
@@ -217,8 +277,10 @@ function offsetForPanel(position, target, dist) {
   const worldPerPx =
     (2 * dist * Math.tan(THREE.MathUtils.degToRad(camera.fov) / 2)) / window.innerHeight;
 
-  const shiftX = (occ.left / 2) * worldPerPx;
-  const shiftY = (occ.bottom / 2) * worldPerPx;
+  // Center horizontally between the left panel and right info card/HUD
+  const shiftX = ((occ.left - occ.right) / 2) * worldPerPx;
+  // Gentle vertical offset so bottom UI doesn't clip the target room
+  const shiftY = (window.innerWidth <= 768 ? occ.bottom / 1.8 : occ.bottom / 2.5) * worldPerPx;
 
   const forward = target.clone().sub(position).normalize();
   let right = new THREE.Vector3().crossVectors(forward, camera.up).normalize();
@@ -254,16 +316,56 @@ function framePoints(points, duration = 0.9) {
   frameSphere(box.getBoundingSphere(sphere), 0.9, duration);
 }
 
-function focusRoom(room) {
+function focusRoom(room, { direct = true } = {}) {
   campus.root.updateWorldMatrix(true, true);
-  const target = room.group.localToWorld(room.centre.clone());
-  const dist = distanceFor(Math.max(Math.sqrt(room.area) * 2.1, 9));
+
+  // 1. Get true 3D bounding box of the room (floor + walls) in world space
+  const roomBox = new THREE.Box3();
+  if (room.floor) roomBox.setFromObject(room.floor);
+  if (room.walls) roomBox.expandByObject(room.walls);
+
+  const target = roomBox.isEmpty()
+    ? room.group.localToWorld(room.centre.clone())
+    : roomBox.getCenter(new THREE.Vector3());
+
+  const size = roomBox.isEmpty()
+    ? new THREE.Vector3(Math.sqrt(room.area || 36), 3, Math.sqrt(room.area || 36))
+    : roomBox.getSize(new THREE.Vector3());
+
+  // 2. Compute camera distance tailored for direct viewing:
+  // Fills a comfortable 40%-50% of screen height/width so the room is large, clear, and perfectly framed
+  const maxHorizDim = Math.max(size.x, size.z, Math.sqrt(room.area || 25) * 1.05, 8);
+  const roomRadius = Math.max(maxHorizDim * 1.05 + 3, 10);
+  const dist = distanceFor(roomRadius);
+
+  // 3. Camera angle:
+  // - If top-down mode: straight down (90°)
+  // - If 3D mode: elevated direct viewing angle (~63° pitch) looking directly into the room
+  //   so walls never block the room floor and the user doesn't need to manually adjust the view!
   const dir = state.topDown
     ? new THREE.Vector3(0, 1, 0.002).normalize()
-    : new THREE.Vector3(0.28, 0.68, 0.68).normalize();
+    : new THREE.Vector3(0.20, 0.88, 0.42).normalize();
+
   const position = target.clone().addScaledVector(dir, dist);
   offsetForPanel(position, target, dist);
-  flyTo(position, target, 0.8);
+  flyTo(position, target, 0.85);
+}
+
+function frameRooms(rooms, duration = 0.85) {
+  if (!rooms || rooms.length === 0) return;
+  if (rooms.length === 1) {
+    focusRoom(rooms[0]);
+    return;
+  }
+  campus.root.updateWorldMatrix(true, true);
+  box.makeEmpty();
+  for (const r of rooms) {
+    const target = r.group.localToWorld(r.centre.clone());
+    box.expandByPoint(target);
+  }
+  box.getBoundingSphere(sphere);
+  sphere.radius = Math.max(sphere.radius * 1.6, 18);
+  frameSphere(sphere, 0.9, duration);
 }
 
 // ---------------------------------------------------------------- selection
@@ -293,13 +395,18 @@ function select(room, { fly = false } = {}) {
   if (state.focusOnlyRooms && (!room || !state.focusOnlyRooms.has(room))) {
     state.focusOnlyRooms = null;
     for (const r of campus.rooms) {
-      r.label.element?.classList.remove('is-highlighted');
+      r.label.element?.classList.remove('is-highlighted', 'is-selected');
+      paint(r, 'base');
     }
   }
 
   state.selected = room;
   if (!room) {
     infoCard.hidden = true;
+    for (const r of campus.rooms) {
+      r.label.element?.classList.remove('is-highlighted', 'is-selected');
+      paint(r, 'base');
+    }
     updateLabels();
     return;
   }
@@ -312,6 +419,37 @@ function select(room, { fly = false } = {}) {
   if (fly) focusRoom(room);
   renderLevelList();
   updateLabels();
+}
+
+function restoreNormalMode() {
+  select(null);
+  state.focusOnlyRooms = null;
+  infoCard.classList.remove('is-minimized');
+  infoCard.hidden = true;
+  for (const r of campus.rooms) {
+    paint(r, 'base');
+    r.label.element?.classList.remove('is-highlighted', 'is-selected');
+  }
+
+  // If actively viewing a route in directions mode, preserve the route and its isolated floors!
+  if (currentTab === 'directions' && state.routeLevelKeys && state.routeLevelKeys.size > 0) {
+    updateLabels();
+    return;
+  }
+
+  if (isMobile() && mainPanel) {
+    mainPanel.classList.remove('is-collapsed');
+  }
+
+  // Restore default exploded view with all floors active
+  setMode('explode');
+  state.hiddenLevels.clear();
+  state.activeLevels = new Set(campus.levels.map((l) => l.key));
+  applyLayout();
+  renderLevelList();
+  renderLegend();
+  updateLabels();
+  frameAll(0.85);
 }
 
 function hover(room) {
@@ -410,7 +548,23 @@ canvas.addEventListener('pointerleave', () => {
 
 canvas.addEventListener('click', (event) => {
   if (dragged) return;
-  select(pickAt(event));
+  const picked = pickAt(event);
+  if (picked) {
+    select(picked);
+  } else {
+    // If viewing route in directions mode, tapping blank space collapses panel on mobile but preserves route floor isolation
+    if (currentTab === 'directions' && state.routeLevelKeys && state.routeLevelKeys.size > 0) {
+      select(null);
+      if (isMobile()) collapsePanel();
+      return;
+    }
+    // Clicked on blank space: restore default exploded mode with all floors active
+    if (state.selected || state.focusOnlyRooms || state.mode === 'single') {
+      restoreNormalMode();
+    } else {
+      select(null);
+    }
+  }
 });
 
 canvas.addEventListener('dblclick', (event) => {
@@ -464,7 +618,7 @@ const tabDirections = document.getElementById('tab-directions');
 const navBtnExplore = document.getElementById('nav-btn-explore');
 const navBtnDirections = document.getElementById('nav-btn-directions');
 
-let currentTab = 'home';
+currentTab = 'home';
 
 function switchTab(name, { refocus = true, autoExpand = true } = {}) {
   currentTab = name;
@@ -477,10 +631,15 @@ function switchTab(name, { refocus = true, autoExpand = true } = {}) {
     if (panelReopenFab) panelReopenFab.hidden = true;
     if (isMobile()) collapsePanel();
 
-    // Reset focused destination labels when returning to home
+    // Hide direction route when returning to home
+    routeLayer.setVisible(false);
+
+    // Reset focused destination labels and active selection when returning to home
+    select(null);
     state.focusOnlyRooms = null;
     for (const r of campus.rooms) {
-      r.label.element?.classList.remove('is-highlighted');
+      r.label.element?.classList.remove('is-highlighted', 'is-selected');
+      paint(r, 'base');
     }
   } else {
     if (homeScreen) homeScreen.classList.add('is-hidden');
@@ -516,20 +675,27 @@ function switchTab(name, { refocus = true, autoExpand = true } = {}) {
       entering.classList.add('is-entering');
     }
 
-    // Reset route floor isolation when user explicitly switches back to Explore
-    if (name === 'explore' && state.routeLevelKeys) {
-      state.routeLevelKeys = null;
-      state.hiddenLevels.clear();
-      state.activeLevels = new Set(campus.levels.map((l) => l.key));
-      applyLayout();
-      renderLevelList();
-      updateLabels();
-    } else if (name === 'directions' && directions.hasRoute()) {
-      directions.refresh();
+    // Hide direction route and reset route floor isolation when user toggles to Explore / View Floorplan
+    if (name === 'explore') {
+      routeLayer.setVisible(false);
+      state.routeEndpoints = null;
+      if (state.routeLevelKeys) {
+        state.routeLevelKeys = null;
+        state.hiddenLevels.clear();
+        state.activeLevels = new Set(campus.levels.map((l) => l.key));
+        applyLayout();
+        renderLevelList();
+        updateLabels();
+      }
+    } else if (name === 'directions') {
+      routeLayer.setVisible(true);
+      if (directions.hasRoute()) {
+        directions.refresh();
+      }
     }
 
-    // Refocus camera for panel layout if requested
-    if (refocus) {
+    // Refocus camera for panel layout if requested (skip if directions already framed a route)
+    if (refocus && (name !== 'directions' || !directions.hasRoute())) {
       setTimeout(() => {
         frameAll(0.6);
       }, 50);
@@ -548,6 +714,60 @@ document.getElementById('explore-bottom-home')?.addEventListener('click', () => 
 // Wire Subnav Mode Switcher
 navBtnExplore?.addEventListener('click', () => switchTab('explore'));
 navBtnDirections?.addEventListener('click', () => switchTab('directions'));
+
+// ---------------------------------------------------------------- mobile guide welcome popup
+const guidePopupModal = document.getElementById('guide-popup-modal');
+const guidePopupClose = document.getElementById('guide-popup-close');
+const guidePopupBackdrop = document.getElementById('guide-popup-backdrop');
+const guidePopupCta = document.getElementById('guide-popup-cta');
+const mobileGuideOpenBtn = document.getElementById('mobile-guide-open-btn');
+
+function openGuidePopup() {
+  if (!guidePopupModal) return;
+  guidePopupModal.hidden = false;
+  guidePopupModal.classList.remove('is-leaving');
+}
+
+function closeGuidePopup() {
+  if (!guidePopupModal || guidePopupModal.hidden) return;
+  guidePopupModal.classList.add('is-leaving');
+  setTimeout(() => {
+    guidePopupModal.hidden = true;
+    guidePopupModal.classList.remove('is-leaving');
+  }, 260);
+  try {
+    sessionStorage.setItem('guide_popup_seen', '1');
+  } catch (e) {}
+}
+
+guidePopupClose?.addEventListener('click', closeGuidePopup);
+guidePopupBackdrop?.addEventListener('click', closeGuidePopup);
+guidePopupCta?.addEventListener('click', closeGuidePopup);
+mobileGuideOpenBtn?.addEventListener('click', openGuidePopup);
+
+// Escape key to dismiss guide popup
+window.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape' && guidePopupModal && !guidePopupModal.hidden) {
+    closeGuidePopup();
+  }
+});
+
+// For phone mode: user should see the popup message for the person, then see the main page
+function checkMobileGuidePopup() {
+  if (isMobile()) {
+    try {
+      const alreadySeen = sessionStorage.getItem('guide_popup_seen');
+      if (!alreadySeen) {
+        openGuidePopup();
+      }
+    } catch (e) {
+      openGuidePopup();
+    }
+  }
+}
+
+// Trigger initial check for phone mode
+checkMobileGuidePopup();
 
 // ---------------------------------------------------------------- widget expand / collapse (desktop & mobile)
 
@@ -728,7 +948,17 @@ compassBtn?.addEventListener('click', () => {
   flyTo(position, target, 0.7);
 });
 
-// Camera Presets
+// Camera Presets & HUD Quick Controls
+const hudLabelsBtn = document.getElementById('preset-labels');
+hudLabelsBtn?.addEventListener('click', () => {
+  state.labels = !state.labels;
+  const toggleLabels = document.getElementById('toggle-labels');
+  if (toggleLabels) toggleLabels.checked = state.labels;
+  hudLabelsBtn.classList.toggle('is-active', state.labels);
+  labelLayer.style.display = state.labels ? '' : 'none';
+  updateLabels();
+});
+
 document.getElementById('preset-iso')?.addEventListener('click', () => {
   state.topDown = false;
   const toggleTop = document.getElementById('toggle-top');
@@ -748,18 +978,31 @@ document.getElementById('preset-top')?.addEventListener('click', () => {
 });
 
 document.getElementById('preset-fit')?.addEventListener('click', () => {
-  state.focusOnlyRooms = null;
-  for (const r of campus.rooms) {
-    r.label.element?.classList.remove('is-highlighted');
+  if (currentTab === 'directions' && state.routeLevelKeys && directions?.hasRoute()) {
+    directions.refresh();
+  } else {
+    restoreNormalMode();
   }
-  updateLabels();
-  frameAll(0.7);
+});
+
+// ---------------------------------------------------------------- facility reporting & maintenance
+
+const facilityManager = createFacilityReportManager({
+  campus,
+  onSelectRoom: (room) => {
+    focusSingleDestination(room);
+  },
+  showToast,
 });
 
 // ---------------------------------------------------------------- room info card
 
 function showInfo(room) {
   infoCard.hidden = false;
+  infoCard.classList.remove('is-minimized');
+  if (isMobile() && mainPanel) {
+    mainPanel.classList.add('is-collapsed');
+  }
   document.getElementById('info-where').textContent =
     `${room.building.name} · ${room.level.name}`;
   document.getElementById('info-name').textContent = room.name;
@@ -772,12 +1015,145 @@ function showInfo(room) {
   if (badgeEl) badgeEl.textContent = CATEGORIES[room.category]?.label ?? 'Room';
 
   document.getElementById('info-type').textContent = CATEGORIES[room.category].label;
-  document.getElementById('info-area').textContent = `${Math.round(room.area)} m²`;
+
+  // Active Broken Facility Issue Alert
+  const issueAlert = document.getElementById('info-issue-alert');
+  const issueReports = facilityManager ? facilityManager.getReportsForRoom(room) : [];
+  if (issueAlert) {
+    if (issueReports.length > 0) {
+      const activeRep = issueReports.find((r) => r.status !== 'Resolved') || issueReports[0];
+      const titleEl = document.getElementById('info-issue-title');
+      const descEl = document.getElementById('info-issue-desc');
+      if (titleEl) {
+        titleEl.textContent = `${issueReports.length} Facility Issue${issueReports.length > 1 ? 's' : ''} Reported`;
+      }
+      if (descEl) {
+        descEl.textContent = `${activeRep.facilityIcon || '⚠️'} ${activeRep.facilityType} · ${activeRep.status}`;
+      }
+      issueAlert.hidden = false;
+      const viewBtn = document.getElementById('info-issue-view-btn');
+      if (viewBtn) {
+        viewBtn.onclick = (e) => {
+          e.stopPropagation();
+          facilityManager.openReportsListModal(room);
+        };
+      }
+    } else {
+      issueAlert.hidden = true;
+    }
+  }
+
+  // Photo Reference Preview
+  const photoUrl = room.photo ?? getRoomPhoto(room);
+  const photoCard = document.getElementById('info-photo-card');
+  const photoImg = document.getElementById('info-photo');
+  const photoBadge = document.getElementById('info-photo-badge');
+
+  if (photoCard && photoImg) {
+    if (photoUrl) {
+      photoImg.src = photoUrl;
+      photoImg.alt = `${room.name} Photo Reference`;
+      photoCard.hidden = false;
+      if (photoBadge) {
+        photoBadge.innerHTML = '<span class="photo-badge-icon">✓</span> Verified Photo';
+        photoBadge.classList.add('is-verified');
+      }
+    } else {
+      photoCard.hidden = true;
+    }
+  }
 }
 
-document.getElementById('info-close')?.addEventListener('click', () => select(null));
+// Photo Lightbox modal handlers
+function openPhotoLightbox(room) {
+  if (!room) return;
+  const photoUrl = room.photo ?? getRoomPhoto(room);
+  if (!photoUrl) return;
+
+  const modal = document.getElementById('photo-lightbox');
+  const imgEl = document.getElementById('photo-lightbox-img');
+  const titleEl = document.getElementById('photo-lightbox-title');
+  const subtitleEl = document.getElementById('photo-lightbox-subtitle');
+  const badgeEl = document.getElementById('photo-lightbox-badge');
+
+  if (!modal || !imgEl) return;
+
+  imgEl.src = photoUrl;
+  imgEl.alt = `${room.name} Photo Reference`;
+  if (titleEl) {
+    titleEl.textContent = room.code ? `${room.name} (${room.code})` : room.name;
+  }
+  if (subtitleEl) {
+    subtitleEl.textContent = `${room.building.name} · ${room.level.name} · ${CATEGORIES[room.category]?.label ?? 'Room'}`;
+  }
+  if (badgeEl) {
+    badgeEl.textContent = '✓ Verified Location Photo';
+    badgeEl.classList.add('is-verified');
+  }
+
+  modal.hidden = false;
+}
+
+function closePhotoLightbox() {
+  const modal = document.getElementById('photo-lightbox');
+  if (modal) modal.hidden = true;
+}
+
+document.getElementById('info-photo-wrap')?.addEventListener('click', () => {
+  if (state.selected) openPhotoLightbox(state.selected);
+});
+document.getElementById('info-photo-wrap')?.addEventListener('keydown', (e) => {
+  if (e.key === 'Enter' || e.key === ' ') {
+    e.preventDefault();
+    if (state.selected) openPhotoLightbox(state.selected);
+  }
+});
+document.getElementById('photo-lightbox-close')?.addEventListener('click', closePhotoLightbox);
+document.getElementById('photo-lightbox-backdrop')?.addEventListener('click', closePhotoLightbox);
+window.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape') {
+    closePhotoLightbox();
+  }
+});
+
+document.getElementById('info-handle')?.addEventListener('click', () => {
+  infoCard.classList.toggle('is-minimized');
+  if (state.selected) {
+    setTimeout(() => {
+      focusRoom(state.selected, { direct: true });
+    }, 150);
+  }
+});
+
+document.getElementById('info-close')?.addEventListener('click', () => {
+  restoreNormalMode();
+});
 document.getElementById('info-focus')?.addEventListener('click', () => {
   if (state.selected) focusRoom(state.selected);
+});
+
+// "Report Broken Facility" button on Info Card
+document.getElementById('info-report-btn')?.addEventListener('click', () => {
+  if (state.selected) {
+    facilityManager.openReportModal(state.selected);
+  } else {
+    facilityManager.openReportModal();
+  }
+});
+
+// "Report Broken Facility" card on Home Screen
+document.getElementById('card-go-report')?.addEventListener('click', () => {
+  facilityManager.openReportModal(state.selected || null);
+});
+
+// "Found a Broken Facility" CTA in Explore tab
+document.getElementById('explore-btn-report')?.addEventListener('click', () => {
+  facilityManager.openReportModal(state.selected || null);
+});
+
+// Viewport HUD Reports Log button
+document.getElementById('btn-hud-reports')?.addEventListener('click', () => {
+  facilityManager.openReportsListModal();
 });
 
 // Share room location via link
@@ -802,7 +1178,16 @@ document.getElementById('info-share')?.addEventListener('click', () => {
 document.getElementById('view-mode')?.addEventListener('click', (event) => {
   const button = event.target.closest('button[data-mode]');
   if (!button) return;
-  setMode(button.dataset.mode);
+  const newMode = button.dataset.mode;
+  if (newMode === 'explode' && state.mode === 'single') {
+    // When returning to exploded view, re-activate levels that are not explicitly hidden
+    for (const l of campus.levels) {
+      if (!state.hiddenLevels.has(l.key)) {
+        state.activeLevels.add(l.key);
+      }
+    }
+  }
+  setMode(newMode);
   applyLayout();
   frameAll();
 });
@@ -824,7 +1209,9 @@ function renderLevelList() {
       currentBuilding = level.building.id;
       const bId = level.building.id;
       const buildingLevels = campus.levels.filter((l) => l.building.id === bId);
-      const allBuildingActive = buildingLevels.every((l) => state.activeLevels?.has(l.key));
+      const allBuildingActive = buildingLevels.every(
+        (l) => state.activeLevels?.has(l.key) && !state.hiddenLevels?.has(l.key)
+      );
 
       const heading = document.createElement('div');
       heading.className = 'levels__group';
@@ -837,16 +1224,24 @@ function renderLevelList() {
       heading.querySelector('.levels__group-toggle')?.addEventListener('click', (e) => {
         e.stopPropagation();
         if (allBuildingActive) {
+          // Deactivate all floors in this building and hide their 3D models
           for (const l of buildingLevels) {
             state.activeLevels.delete(l.key);
+            state.hiddenLevels.add(l.key);
+          }
+          if (buildingLevels.some((l) => l.key === state.activeLevel)) {
+            state.activeLevel = Array.from(state.activeLevels)[0] || null;
           }
         } else {
+          // Activate all floors in this building and show their 3D models
           for (const l of buildingLevels) {
             state.activeLevels.add(l.key);
             state.hiddenLevels.delete(l.key);
           }
+          if (!state.activeLevel || !state.activeLevels.has(state.activeLevel)) {
+            state.activeLevel = buildingLevels[0].key;
+          }
         }
-        renderLevelList();
         applyLayout();
         updateLabels();
       });
@@ -854,16 +1249,16 @@ function renderLevelList() {
       levelList.append(heading);
     }
     const button = document.createElement('button');
-    const on =
+    const isLevelActive =
       state.mode === 'single'
         ? level.key === state.activeLevel
-        : !state.hiddenLevels.has(level.key);
-    const isTarget = Boolean(on && state.activeLevels?.has(level.key));
-    button.className = (on ? 'is-on' : 'is-off') + (isTarget ? ' is-target' : '');
+        : state.activeLevels.has(level.key) && !state.hiddenLevels.has(level.key);
+
+    button.className = isLevelActive ? 'is-on is-target' : 'is-off';
     button.innerHTML =
       `<span class="swatch"></span>` +
       `<span class="levels__name">${escapeHtml(level.level.name)}</span>` +
-      (isTarget ? `<span class="levels__active-pill">Active</span>` : '') +
+      (isLevelActive ? `<span class="levels__active-pill">Active</span>` : '') +
       `<span class="count">${level.rooms.length} rooms</span>`;
     button.addEventListener('click', () => {
       if (state.mode === 'single') {
@@ -871,20 +1266,23 @@ function renderLevelList() {
         state.activeLevel = level.key;
         state.activeLevels.clear();
         state.activeLevels.add(level.key);
+        state.hiddenLevels.delete(level.key);
         applyLayout();
         frameAll(0.6);
         return;
       }
-      // Toggle this level active or inactive
-      if (state.activeLevels.has(level.key)) {
+      // Toggle this level active or inactive (and show or hide 3D floor)
+      const currentlyActive = state.activeLevels.has(level.key) && !state.hiddenLevels.has(level.key);
+      if (currentlyActive) {
+        // Deactivate this level and hide its 3D floor
         state.activeLevels.delete(level.key);
+        state.hiddenLevels.add(level.key);
         if (state.activeLevel === level.key) {
           state.activeLevel = Array.from(state.activeLevels)[0] || null;
         }
       } else {
-        if (state.hiddenLevels.has(level.key)) {
-          state.hiddenLevels.delete(level.key);
-        }
+        // Activate this level and show its 3D floor
+        state.hiddenLevels.delete(level.key);
         state.activeLevels.add(level.key);
         state.activeLevel = level.key;
       }
@@ -900,7 +1298,9 @@ function renderLevelList() {
   const toggleWrapper = document.getElementById('toggle-levels-all-label');
   if (toggleLevels) {
     const totalLevels = campus.levels.length;
-    const activeCount = state.activeLevels.size;
+    const activeCount = campus.levels.filter(
+      (l) => state.activeLevels.has(l.key) && !state.hiddenLevels.has(l.key)
+    ).length;
     const hasAnyActive = activeCount > 0;
     const isAllActive = activeCount === totalLevels;
 
@@ -983,18 +1383,20 @@ document.getElementById('btn-show-all-categories')?.addEventListener('click', ()
 document.getElementById('toggle-levels-all')?.addEventListener('change', (event) => {
   const activate = event.target.checked;
   if (!activate) {
-    // Deactivate all floors
+    // Deactivate all floors: hide all 3D floors
     state.activeLevels.clear();
     state.activeLevel = null;
+    for (const l of campus.levels) {
+      state.hiddenLevels.add(l.key);
+    }
   } else {
-    // Activate ALL the floors for whole building
+    // Activate ALL the floors for whole building: show all 3D floors
     for (const l of campus.levels) {
       state.activeLevels.add(l.key);
       state.hiddenLevels.delete(l.key);
     }
     state.activeLevel = campus.levels[1].key;
   }
-  renderLevelList();
   applyLayout();
   updateLabels();
 });
@@ -1003,7 +1405,9 @@ document.getElementById('toggle-levels-all')?.addEventListener('change', (event)
 
 document.getElementById('toggle-labels')?.addEventListener('change', (event) => {
   state.labels = event.target.checked;
+  hudLabelsBtn?.classList.toggle('is-active', state.labels);
   labelLayer.style.display = state.labels ? '' : 'none';
+  updateLabels();
 });
 
 document.getElementById('toggle-walls')?.addEventListener('change', (event) => {
@@ -1039,7 +1443,7 @@ const homeSearchInput = document.getElementById('home-search');
 const homeResultsList = document.getElementById('home-results');
 const homeSearchClear = document.getElementById('home-search-clear');
 
-function attachRoomSearch(inputEl, resultsEl, onSelect) {
+function attachRoomSearch(inputEl, resultsEl, onSelect, clearBtnEl) {
   if (!inputEl || !resultsEl) return;
 
   function performSearch(query) {
@@ -1071,9 +1475,13 @@ function attachRoomSearch(inputEl, resultsEl, onSelect) {
       const dotColor = (CATEGORIES[room.category]?.color ?? 0x152238).toString(16).padStart(6, '0');
       const highlightedName = highlightMatch(room.name, q);
       const codeHtml = room.code ? `<span class="code-pill">${escapeHtml(room.code)}</span>` : '';
+      const photoUrl = room.photo ?? getRoomPhoto(room);
+      const thumbHtml = photoUrl
+        ? `<div class="results__thumb"><img src="${photoUrl}" alt="" loading="lazy" /></div>`
+        : `<span class="dot" style="background:#${dotColor}"></span>`;
 
       li.innerHTML =
-        `<span class="dot" style="background:#${dotColor}"></span>` +
+        thumbHtml +
         `<span class="name">${highlightedName}</span>` +
         codeHtml +
         `<span class="where">${room.building.name.replace('Block ', '')} · ${room.level.name.replace('Level ', 'L')}</span>`;
@@ -1081,7 +1489,7 @@ function attachRoomSearch(inputEl, resultsEl, onSelect) {
       li.addEventListener('click', () => {
         resultsEl.hidden = true;
         inputEl.value = room.code ? `${room.name} (${room.code})` : room.name;
-        if (homeSearchClear) homeSearchClear.hidden = false;
+        if (clearBtnEl) clearBtnEl.hidden = false;
         if (onSelect) {
           onSelect(room);
         } else {
@@ -1094,7 +1502,7 @@ function attachRoomSearch(inputEl, resultsEl, onSelect) {
 
   inputEl.addEventListener('input', (e) => {
     performSearch(e.target.value);
-    if (homeSearchClear) homeSearchClear.hidden = !e.target.value;
+    if (clearBtnEl) clearBtnEl.hidden = !e.target.value;
   });
   inputEl.addEventListener('focus', (e) => performSearch(e.target.value));
   inputEl.addEventListener('keydown', (e) => {
@@ -1107,38 +1515,98 @@ function attachRoomSearch(inputEl, resultsEl, onSelect) {
       if (first) first.click();
     }
   });
+
+  if (clearBtnEl) {
+    clearBtnEl.addEventListener('click', () => {
+      inputEl.value = '';
+      inputEl.focus();
+      resultsEl.hidden = true;
+      clearBtnEl.hidden = true;
+    });
+  }
+
+  document.addEventListener('pointerdown', (e) => {
+    if (!inputEl.contains(e.target) && !resultsEl.contains(e.target)) {
+      resultsEl.hidden = true;
+    }
+  });
 }
 
 // Attach home search (auto-switches to explore view on select & highlights location)
 attachRoomSearch(homeSearchInput, homeResultsList, (room) => {
-  highlightDestination(room.code || room.name);
-});
+  focusSingleDestination(room);
+}, homeSearchClear);
 
-homeSearchClear?.addEventListener('click', () => {
-  if (homeSearchInput) {
-    homeSearchInput.value = '';
-    homeSearchInput.focus();
+// Attach view floorplan tab search
+const exploreSearchInput = document.getElementById('explore-search');
+const exploreResultsList = document.getElementById('explore-results');
+const exploreSearchClear = document.getElementById('explore-search-clear');
+
+attachRoomSearch(exploreSearchInput, exploreResultsList, (room) => {
+  focusSingleDestination(room);
+}, exploreSearchClear);
+
+// Destination Disambiguation Modal (when multiple rooms share the same front name/category)
+function openDestinationPicker(title, rooms) {
+  const modal = document.getElementById('destination-picker-modal');
+  const titleEl = document.getElementById('destination-picker-title');
+  const subtitleEl = document.getElementById('destination-picker-subtitle');
+  const listEl = document.getElementById('destination-picker-list');
+  if (!modal || !listEl) return;
+
+  if (titleEl) titleEl.textContent = `Select ${title}`;
+  if (subtitleEl) subtitleEl.textContent = `${rooms.length} locations found. Choose which one to view:`;
+  listEl.replaceChildren();
+
+  for (const r of rooms) {
+    const li = document.createElement('li');
+    const dotColor = (CATEGORIES[r.category]?.color ?? 0x2563eb).toString(16).padStart(6, '0');
+    const codePill = r.code ? `<span class="code-pill">${escapeHtml(r.code)}</span>` : '';
+    const photoUrl = r.photo ?? getRoomPhoto(r);
+    const thumbHtml = photoUrl
+      ? `<div class="destination-picker-item__thumb"><img src="${photoUrl}" alt="" loading="lazy"/></div>`
+      : `<div class="destination-picker-item__thumb destination-picker-item__thumb--fallback"><span class="dot" style="background:#${dotColor};width:8px;height:8px;border-radius:50%;display:inline-block;"></span></div>`;
+
+    li.innerHTML = `
+      <button class="destination-picker-item" type="button">
+        ${thumbHtml}
+        <div class="destination-picker-item__info">
+          <div class="destination-picker-item__name">
+            ${escapeHtml(r.name)} ${codePill}
+          </div>
+          <div class="destination-picker-item__meta">${escapeHtml(r.building.name)} · ${escapeHtml(r.level.name)}</div>
+        </div>
+        <span class="destination-picker-item__arrow">→</span>
+      </button>
+    `;
+    li.querySelector('button')?.addEventListener('click', () => {
+      closeDestinationPicker();
+      focusSingleDestination(r);
+    });
+    listEl.append(li);
   }
-  if (homeResultsList) homeResultsList.hidden = true;
-  homeSearchClear.hidden = true;
-});
 
-function highlightDestination(query) {
-  const q = query.toLowerCase().trim();
+  modal.hidden = false;
+}
 
-  // Find all rooms matching this query
-  const matchingRooms = campus.rooms.filter((room) => {
-    const haystack = `${room.name} ${room.code ?? ''} ${room.note ?? ''} ${room.category} ${room.building.name} ${room.level.name}`.toLowerCase();
-    return haystack.includes(q);
-  });
+function closeDestinationPicker() {
+  const modal = document.getElementById('destination-picker-modal');
+  if (modal) modal.hidden = true;
+}
 
-  if (!matchingRooms.length) return;
+document.getElementById('destination-picker-close')?.addEventListener('click', closeDestinationPicker);
+document.getElementById('destination-picker-backdrop')?.addEventListener('click', closeDestinationPicker);
 
-  // Primary target room
-  const targetRoom = matchingRooms[0];
+/**
+ * Focus and highlight ONLY one single destination room.
+ * All other rooms (even if sharing the same front name) WILL DISAPPEAR!
+ */
+function focusSingleDestination(targetRoom) {
+  if (!targetRoom) return;
 
-  // 1. Collapse all other labels: only matching destination rooms will show
-  state.focusOnlyRooms = new Set(matchingRooms);
+  // 1. Collapse all other labels: ONLY this specific destination room will show!
+  // Any other room with the same front name (e.g. Surau Mens when Surau Ladies is chosen) WILL DISAPPEAR!
+  state.focusOnlyRooms = new Set([targetRoom]);
 
   // 2. Ensure labels layer is visible and active
   state.labels = true;
@@ -1148,33 +1616,27 @@ function highlightDestination(query) {
 
   // 3. Switch to explore view without resetting camera or expanding mobile sheet
   switchTab('explore', { refocus: false, autoExpand: false });
-
-  // On mobile: collapse the panel so the user can immediately see the 3D map!
   if (isMobile()) {
     collapsePanel();
   }
 
-  // 4. Ensure target levels and categories are active and unhidden
-  for (const r of matchingRooms) {
-    state.hiddenLevels.delete(r.levelKey);
-    state.hiddenCategories.delete(r.category);
-    if (state.activeLevels) state.activeLevels.add(r.levelKey);
-  }
+  // 4. Ensure target level is isolated in Single Floor mode so upper/lower levels don't block
+  state.hiddenLevels.clear();
   state.activeLevel = targetRoom.levelKey;
-
-  // In stack mode, ensure the floor is single mode so it's not obscured by higher slabs
-  if (state.mode === 'stack') {
-    setMode('single');
+  if (state.activeLevels instanceof Set) {
+    state.activeLevels.clear();
+    state.activeLevels.add(targetRoom.levelKey);
   }
+  setMode('single');
 
-  // 5. Highlight the rooms in 3D scene & their labels
+  // 5. Highlight ONLY this specific room in 3D scene & its label; clean all other labels
   for (const r of campus.rooms) {
-    if (matchingRooms.includes(r)) {
+    if (r === targetRoom) {
       paint(r, 'selected');
       r.label.element?.classList.add('is-highlighted');
     } else {
       paint(r, 'base');
-      r.label.element?.classList.remove('is-highlighted');
+      r.label.element?.classList.remove('is-highlighted', 'is-selected');
     }
   }
 
@@ -1188,19 +1650,45 @@ function highlightDestination(query) {
   applyLayout();
   updateLabels();
 
-  // 8. Direct camera flight smoothly to the target location
+  // 8. Direct camera smoothly to directly show this place
   setTimeout(() => {
-    if (matchingRooms.length === 1) {
-      focusRoom(targetRoom);
-    } else {
-      const pts = matchingRooms.map((r) => {
-        const lvl = campus.levels.find((l) => l.key === r.levelKey);
-        const y = lvl ? lvl.group.position.y : 0;
-        return new THREE.Vector3(r.centre.x, y, r.centre.y);
-      });
-      framePoints(pts, 0.85);
-    }
+    focusRoom(targetRoom, { direct: true });
   }, 40);
+}
+
+function highlightDestination(query, labelTitle = '') {
+  if (typeof query === 'object' && query.name) {
+    focusSingleDestination(query);
+    return;
+  }
+
+  const q = String(query).toLowerCase().trim();
+
+  // Exact room name or code match first
+  const exactMatch = campus.rooms.find(
+    (r) => (r.code && r.code.toLowerCase() === q) || r.name.toLowerCase() === q
+  );
+  if (exactMatch) {
+    focusSingleDestination(exactMatch);
+    return;
+  }
+
+  // Find all rooms matching this query
+  const matchingRooms = campus.rooms.filter((room) => {
+    const haystack = `${room.name} ${room.code ?? ''} ${room.note ?? ''} ${room.category} ${room.building.name} ${room.level.name}`.toLowerCase();
+    return haystack.includes(q);
+  });
+
+  if (!matchingRooms.length) return;
+
+  if (matchingRooms.length === 1) {
+    focusSingleDestination(matchingRooms[0]);
+    return;
+  }
+
+  // If there is more than one place that has the same front name (e.g. Surau Ladies vs Surau Mens, or Makmal Mikro 1..8):
+  // Show the destination picker modal so user selects exactly which one they want!
+  openDestinationPicker(labelTitle || query, matchingRooms);
 }
 
 // Attach popular destination chips on Home: direct highlight location & collapse other labels
@@ -1208,8 +1696,9 @@ document.getElementById('home-chips')?.addEventListener('click', (e) => {
   const btn = e.target.closest('.chip-btn');
   if (!btn) return;
   const q = btn.dataset.query;
+  const title = btn.textContent.trim();
   if (q) {
-    highlightDestination(q);
+    highlightDestination(q, title);
   }
 });
 
@@ -1248,8 +1737,8 @@ function revealRoom(room) {
   state.hiddenCategories.delete(room.category);
   state.hiddenLevels.delete(room.levelKey);
   state.activeLevel = room.levelKey;
-  if (room.building && state.activeLevels) {
-    state.activeLevels[room.building.id] = room.levelKey;
+  if (state.activeLevels instanceof Set) {
+    state.activeLevels.add(room.levelKey);
   }
 
   if (state.mode === 'stack') {
@@ -1264,7 +1753,13 @@ function revealRoom(room) {
 
 window.addEventListener('keydown', (event) => {
   if (event.target.matches('input')) return;
-  if (event.key === 'Escape') select(null);
+  if (event.key === 'Escape') {
+    if (state.selected || state.focusOnlyRooms || state.mode === 'single') {
+      restoreNormalMode();
+    } else {
+      select(null);
+    }
+  }
   if (event.key === 'f' || event.key === 'F') frameAll();
 });
 
@@ -1317,12 +1812,44 @@ function updateLabels() {
   // We prioritize the target level for each building (Block A & Block B) so floors don't stack illegibly.
   const targetLevels = getTargetLevels();
 
+  // Route Focus Mode: When a route is actively displayed in Directions tab,
+  // suppress ambient/unrelated room labels so they never occlude or block the route path!
+  const isNavigating =
+    (currentTab === 'directions' && typeof directions !== 'undefined' && directions?.hasRoute()) ||
+    Boolean(state.routeEndpoints && state.routeEndpoints.size > 0);
+
   for (const room of campus.rooms) {
-    // If a specific destination is highlighted from Popular Destinations, collapse all other labels
+    const isStairsOrLift =
+      /stair|tangga/i.test(room.name) ||
+      /lift|elevator/i.test(room.name) ||
+      (room.category === 'circulation' && /stair|tangga|lift|elevator/i.test(room.note ?? ''));
+
+    // In Route Focus Mode (while viewing an active route):
+    // Suppress ambient room labels so they never block the route line,
+    // BUT NEVER HIDE stairs or elevator labels!
+    if (isNavigating) {
+      const isEndpoint =
+        room === state.selected ||
+        Boolean(
+          state.routeEndpoints && (
+            (room.code && state.routeEndpoints.has(room.code)) ||
+            state.routeEndpoints.has(room.name)
+          )
+        );
+      if (!isEndpoint && !isStairsOrLift) {
+        room.label.visible = false;
+        if (room.label.element) room.label.element.style.display = 'none';
+        continue;
+      }
+    }
+
+    // If a specific destination is highlighted from Popular Destinations, collapse other labels (except stairs/lifts)
     if (state.focusOnlyRooms && !state.focusOnlyRooms.has(room)) {
-      room.label.visible = false;
-      if (room.label.element) room.label.element.style.display = 'none';
-      continue;
+      if (!isStairsOrLift) {
+        room.label.visible = false;
+        if (room.label.element) room.label.element.style.display = 'none';
+        continue;
+      }
     }
 
     if (!isRoomReadable(room)) {
@@ -1332,10 +1859,10 @@ function updateLabels() {
     }
 
     // Option 1: Per-Building Active Floor Filtering
-    // Only show room labels on each building's active focus level to eliminate cross-floor overlap
-    if (state.mode === 'explode') {
+    // Only show room labels on each building's active focus level to eliminate cross-floor overlap (skip during navigation)
+    if (state.mode === 'explode' && !state.focusOnlyRooms && !isNavigating) {
       const isTargetLevel = targetLevels.has(room.levelKey);
-      if (!isTargetLevel && room !== state.selected) {
+      if (!isTargetLevel && room !== state.selected && !isStairsOrLift) {
         room.label.visible = false;
         if (room.label.element) room.label.element.style.display = 'none';
         continue;
@@ -1360,9 +1887,32 @@ function updateLabels() {
   }
 
   candidates.sort((a, b) => {
-    // 1. Selected room or route endpoints (origin/destination) always have absolute priority
-    const aEndpoint = a.room === state.selected || Boolean(state.routeEndpoints?.has(a.room.code));
-    const bEndpoint = b.room === state.selected || Boolean(state.routeEndpoints?.has(b.room.code));
+    // 1. Selected room, focused destination rooms, route endpoints, OR stairs/elevators on route have top priority
+    const aStairsOrLift = /stair|tangga|lift|elevator/i.test(a.room.name);
+    const bStairsOrLift = /stair|tangga|lift|elevator/i.test(b.room.name);
+
+    const aEndpoint =
+      a.room === state.selected ||
+      Boolean(state.focusOnlyRooms && state.focusOnlyRooms.has(a.room)) ||
+      Boolean(
+        state.routeEndpoints && (
+          (a.room.code && state.routeEndpoints.has(a.room.code)) ||
+          state.routeEndpoints.has(a.room.name)
+        )
+      ) ||
+      (isNavigating && aStairsOrLift);
+
+    const bEndpoint =
+      b.room === state.selected ||
+      Boolean(state.focusOnlyRooms && state.focusOnlyRooms.has(b.room)) ||
+      Boolean(
+        state.routeEndpoints && (
+          (b.room.code && state.routeEndpoints.has(b.room.code)) ||
+          state.routeEndpoints.has(b.room.name)
+        )
+      ) ||
+      (isNavigating && bStairsOrLift);
+
     if (aEndpoint !== bEndpoint) return aEndpoint ? -1 : 1;
 
     // 2. Active / target level priority per building
@@ -1424,10 +1974,20 @@ function updateLabels() {
       y1: item.y + h / 2 + padY,
     };
 
-    const isEndpoint = Boolean(state.routeEndpoints?.has(item.room.code));
+    const isFocused = Boolean(state.focusOnlyRooms && state.focusOnlyRooms.has(item.room));
+    const isEndpoint = Boolean(
+      state.routeEndpoints && (
+        (item.room.code && state.routeEndpoints.has(item.room.code)) ||
+        state.routeEndpoints.has(item.room.name)
+      )
+    );
+    const isStairsOrLift = isNavigating && /stair|tangga|lift|elevator/i.test(item.room.name);
+
     const clashes =
       item.room !== state.selected &&
+      !isFocused &&
       !isEndpoint &&
+      !isStairsOrLift &&
       placed.some((p) => p.x0 < rect.x1 && p.x1 > rect.x0 && p.y0 < rect.y1 && p.y1 > rect.y0);
 
     item.room.label.visible = !clashes;
@@ -1507,6 +2067,7 @@ const directions = setupDirections({
   routeLayer,
   groundElevation,
   onRouteShown(route, { frame }) {
+    state.focusedStep = null;
     // Extract every unique floor level that this route passes through
     const routeLevels = new Set(route.path.map((node) => node.levelKey).filter(Boolean));
     if (routeLevels.size === 0) return;
@@ -1535,8 +2096,11 @@ const directions = setupDirections({
     }
 
     // If the route traverses multiple floors, ensure exploded view so all passing floors are visible
-    if (routeLevels.size > 1 && state.mode === 'single') {
+    if (routeLevels.size > 1) {
       setMode('explode');
+    } else {
+      setMode('single');
+      state.activeLevel = [...routeLevels][0];
     }
 
     // Set activeLevel to destination level
@@ -1550,8 +2114,14 @@ const directions = setupDirections({
     const origNode = route.path[0];
     const origRoom = campus.rooms.find((r) => r.navNode === origNode?.id);
     const destRoom = campus.rooms.find((r) => r.navNode === destNode?.id);
-    if (origRoom?.code) state.routeEndpoints.add(origRoom.code);
-    if (destRoom?.code) state.routeEndpoints.add(destRoom.code);
+    if (origRoom) {
+      if (origRoom.code) state.routeEndpoints.add(origRoom.code);
+      state.routeEndpoints.add(origRoom.name);
+    }
+    if (destRoom) {
+      if (destRoom.code) state.routeEndpoints.add(destRoom.code);
+      state.routeEndpoints.add(destRoom.name);
+    }
 
     // Apply layout, update level sidebar pills & toggle, and refresh labels immediately
     applyLayout();
@@ -1566,8 +2136,100 @@ const directions = setupDirections({
       });
       framePoints(points, 0.9);
     }
+
+    // On mobile phone mode: auto-collapse panel so the 3D route gets the full screen!
+    if (isMobile()) {
+      collapsePanel();
+    }
+  },
+  onStepSelected(step, index) {
+    if (!step) return;
+
+    // 1. Highlight step marker in 3D route layer
+    routeLayer.setStepMarker(step, index);
+
+    // 2. Set focused step state so upper floors are immediately hidden and don't block the lower floor
+    state.focusedStep = step;
+    state.activeLevel = step.levelKey;
+    if (state.activeLevels) {
+      state.activeLevels.add(step.levelKey);
+    }
+    if (step.toLevelKey && state.activeLevels) {
+      state.activeLevels.add(step.toLevelKey);
+    }
+
+    applyLayout();
+    renderLevelList();
+    updateLabels();
+
+    // 3. Smoothly fly camera to directly show the step location on that floor
+    if (step.position) {
+      campus.root.updateWorldMatrix(true, true);
+      const level = campus.levels.find((l) => l.key === step.levelKey);
+      const y = (level ? level.group.position.y : 0) + 14;
+
+      let targetX = step.position.x;
+      let targetZ = step.position.z;
+      let targetY = y;
+
+      const isTransition = Boolean(step.toPosition && step.toLevelKey && step.toLevelKey !== step.levelKey);
+      if (isTransition) {
+        const toLevel = campus.levels.find((l) => l.key === step.toLevelKey);
+        const toY = (toLevel ? toLevel.group.position.y : 0) + 14;
+        targetX = (step.position.x + step.toPosition.x) / 2;
+        targetZ = (step.position.z + step.toPosition.z) / 2;
+        targetY = (y + toY) / 2;
+      }
+
+      const targetLocal = new THREE.Vector3(targetX, targetY, targetZ);
+      const targetWorld = campus.content.localToWorld(targetLocal);
+
+      // Elevated direct viewing angle (~63° pitch) looking directly down into the floor
+      // With upper floors hidden, this provides a 100% unobstructed, direct view of the floor!
+      const dist = isTransition ? 46 : 34;
+      const dir = state.topDown
+        ? new THREE.Vector3(0, 1, 0.002).normalize()
+        : new THREE.Vector3(0.18, 0.89, 0.42).normalize();
+
+      const camPos = targetWorld.clone().addScaledVector(dir, dist);
+      offsetForPanel(camPos, targetWorld, dist);
+      flyTo(camPos, targetWorld, 0.75);
+    }
+
+    // 4. In mobile phone mode: auto-collapse panel so user gets full floorplan view
+    if (isMobile()) {
+      collapsePanel();
+    }
+  },
+  onShowFullRoute() {
+    state.focusedStep = null;
+    routeLayer.clearStepMarker();
+    applyLayout();
+    renderLevelList();
+    updateLabels();
+
+    const activeRoute = directions.getActiveRoute?.();
+    if (activeRoute) {
+      const points = activeRoute.path.map((node) => {
+        const level = campus.levels.find((l) => l.key === node.levelKey);
+        const y = level ? level.group.position.y + 14 : 14;
+        return new THREE.Vector3(node.x, y, node.z);
+      });
+      framePoints(points, 0.9);
+    } else {
+      frameAll(0.85);
+    }
+  },
+  onStepCleared() {
+    state.focusedStep = null;
+    routeLayer.clearStepMarker();
+    applyLayout();
+    renderLevelList();
+    updateLabels();
   },
   onRouteCleared() {
+    state.focusedStep = null;
+    routeLayer.clearStepMarker();
     state.routeEndpoints = null;
     state.routeLevelKeys = null;
     // When directions are cleared, restore all floors visible & active
@@ -1581,8 +2243,11 @@ const directions = setupDirections({
 });
 
 document.addEventListener('directions-restarted', () => {
+  state.focusedStep = null;
+  routeLayer.clearStepMarker();
   switchTab('home');
   state.routeEndpoints = null;
+  state.routeLevelKeys = null;
   state.selectedCategories.clear();
   state.hiddenLevels.clear();
   state.activeLevels = new Set(campus.levels.map((l) => l.key));
@@ -1597,8 +2262,23 @@ document.addEventListener('directions-restarted', () => {
 // "Directions to here" button in the info card
 document.getElementById('info-directions')?.addEventListener('click', () => {
   if (!state.selected) return;
-  directions.setDestination(state.selected);
-  switchTab('directions');
+  const targetRoom = state.selected;
+  for (const r of campus.rooms) {
+    r.label.element?.classList.remove('is-highlighted');
+  }
+  state.focusOnlyRooms = null;
+  select(null);
+  infoCard.hidden = true;
+
+  // Switch to directions tab without auto-expanding or overriding route framing
+  switchTab('directions', { refocus: false, autoExpand: false });
+  // Set destination and compute route
+  directions.setDestination(targetRoom);
+
+  // In mobile phone mode, collapse panel so the route gets full screen
+  if (isMobile()) {
+    collapsePanel();
+  }
 });
 
 // ---------------------------------------------------------------- URL hash deep link
@@ -1627,12 +2307,27 @@ function checkUrlHash() {
 // ---------------------------------------------------------------- boot
 
 document.getElementById('fit')?.addEventListener('click', () => {
-  state.focusOnlyRooms = null;
-  for (const r of campus.rooms) {
-    r.label.element?.classList.remove('is-highlighted');
+  if (currentTab === 'directions' && state.routeLevelKeys && directions?.hasRoute()) {
+    state.focusedStep = null;
+    directions.clearStepSelection?.();
+    routeLayer.clearStepMarker();
+    applyLayout();
+    renderLevelList();
+    updateLabels();
+    const activeRoute = directions.getActiveRoute?.();
+    if (activeRoute) {
+      const points = activeRoute.path.map((node) => {
+        const level = campus.levels.find((l) => l.key === node.levelKey);
+        const y = level ? level.group.position.y + 14 : 14;
+        return new THREE.Vector3(node.x, y, node.z);
+      });
+      framePoints(points, 0.9);
+    } else {
+      directions.refresh();
+    }
+  } else {
+    restoreNormalMode();
   }
-  updateLabels();
-  frameAll();
 });
 scene.add(sun.target);
 
