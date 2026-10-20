@@ -1,3 +1,7 @@
+[hidden] {
+  display: none !important;
+}
+
 :root {
   /* Brand & Theme Colors */
   --navy: #152238;
@@ -4075,6 +4079,10 @@ input[type='range']::-webkit-slider-thumb:active {
   box-shadow: 0 2px 8px rgba(34, 197, 94, 0.1);
 }
 
+.photo-preview-card[hidden] {
+  display: none !important;
+}
+
 .photo-preview-thumb-wrap {
   position: relative;
   width: 72px;
@@ -4974,6 +4982,42 @@ input[type='range']::-webkit-slider-thumb:active {
   display: flex;
   flex-direction: column;
   gap: 4px;
+}
+
+.reports-header-badges {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.cloud-sync-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 9px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 700;
+  background: rgba(16, 185, 129, 0.12);
+  color: #059669;
+  border: 1px solid rgba(16, 185, 129, 0.28);
+  letter-spacing: 0.02em;
+  transition: all 0.2s ease;
+}
+
+.cloud-sync-pill.is-offline {
+  background: rgba(148, 163, 184, 0.14);
+  color: #64748b;
+  border-color: rgba(148, 163, 184, 0.28);
+}
+
+.cloud-sync-dot {
+  width: 6.5px;
+  height: 6.5px;
+  border-radius: 50%;
+  background: currentColor;
+  box-shadow: 0 0 6px currentColor;
 }
 
 .reports-list-header__actions {

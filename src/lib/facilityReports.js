@@ -4,10 +4,21 @@
  * and track facility issues with persistent storage.
  */
 
+import {
+  isSupabaseConfigured,
+  fetchReportsFromSupabase,
+  saveReportToSupabase,
+  updateReportStatusInSupabase,
+  deleteReportFromSupabase,
+  subscribeToRealtimeReports,
+  fromDatabaseRow,
+} from './supabase.js';
+
 const STORAGE_KEY = 'fcsit_facility_reports_v1';
 const USER_INFO_KEY = 'fcsit_reporter_info_v1';
 const DEVICE_KEY = 'fcsit_device_id_v1';
-const ROLE_KEY = 'fcsit_user_role_v1';
+const ROLE_KEY = 'fcsit_user_role_v2';
+const ADMIN_PASSCODE = 'looiyz';
 
 /**
  * Get or generate a persistent unique device ID for this client/browser
@@ -24,17 +35,17 @@ export function getDeviceId() {
 }
 
 /**
- * Get the current user role: 'admin' (default) or 'user'
+ * Get the current user role: 'user' (default) or 'admin'
  */
 export function getUserRole() {
   const role = localStorage.getItem(ROLE_KEY);
   if (!role) {
     try {
-      localStorage.setItem(ROLE_KEY, 'admin');
+      localStorage.setItem(ROLE_KEY, 'user');
     } catch (e) {}
-    return 'admin';
+    return 'user';
   }
-  return role === 'user' ? 'user' : 'admin';
+  return role === 'admin' ? 'admin' : 'user';
 }
 
 export function setUserRole(role) {
@@ -42,11 +53,6 @@ export function setUserRole(role) {
     localStorage.setItem(ROLE_KEY, role);
   } catch (e) {}
 }
-
-// Preset sample photos for demo seed data (self-contained SVG data URIs)
-const DEMO_PROJECTOR_SVG = `data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="600" height="400" viewBox="0 0 600 400"><rect width="600" height="400" fill="%231e293b"/><rect x="80" y="80" width="440" height="180" rx="16" fill="%23334155" stroke="%23475569" stroke-width="4"/><circle cx="420" cy="170" r="50" fill="%230f172a" stroke="%2364748b" stroke-width="8"/><circle cx="420" cy="170" r="32" fill="%231e293b"/><circle cx="150" cy="140" r="10" fill="%23ef4444"/><text x="170" y="145" fill="%23ef4444" font-family="sans-serif" font-size="14" font-weight="bold">LAMP FAILURE</text><circle cx="150" cy="180" r="10" fill="%23eab308"/><text x="170" y="185" fill="%23eab308" font-family="sans-serif" font-size="14">TEMP WARNING</text><rect x="60" y="300" width="480" height="60" rx="8" fill="%230f172a"/><text x="300" y="338" text-anchor="middle" fill="%23f8fafc" font-family="sans-serif" font-size="16" font-weight="bold">Dewan Kuliah 1 · Main Projector Broken</text></svg>`;
-
-const DEMO_AC_SVG = `data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="600" height="400" viewBox="0 0 600 400"><rect width="600" height="400" fill="%230f172a"/><rect x="100" y="60" width="400" height="150" rx="8" fill="%23f8fafc" stroke="%23cbd5e1" stroke-width="3"/><line x1="130" y1="130" x2="470" y2="130" stroke="%2394a3b8" stroke-width="3"/><line x1="130" y1="150" x2="470" y2="150" stroke="%2394a3b8" stroke-width="3"/><line x1="130" y1="170" x2="470" y2="170" stroke="%2394a3b8" stroke-width="3"/><path d="M260 220 C260 220 250 250 250 260 A10 10 0 0 0 270 260 C270 250 260 220 260 220 Z" fill="%2338bdf8"/><path d="M340 220 C340 220 330 270 330 280 A10 10 0 0 0 350 280 C350 270 340 220 340 220 Z" fill="%2338bdf8"/><ellipse cx="300" cy="350" rx="140" ry="24" fill="%230284c7" opacity="0.45"/><text x="300" y="356" text-anchor="middle" fill="%23e0f2fe" font-family="sans-serif" font-size="15" font-weight="bold">Makmal CCNA · AC Dripping Water</text></svg>`;
 
 /**
  * Seed initial realistic demo reports if none exist
@@ -80,7 +86,7 @@ function getInitialReports() {
       facilityIcon: '📽️',
       description: 'Main lecture projector bulb has burned out and turns off after 2 minutes. HDMI cable socket is also loose.',
       urgency: 'Urgent',
-      photo: DEMO_PROJECTOR_SVG,
+      photo: null,
       reporterName: 'Dr. Siti (Lecturer)',
       reporterContact: 'siti@fcsit.edu.my',
       timestamp: new Date(Date.now() - 2 * 3600 * 1000).toISOString(),
@@ -98,7 +104,7 @@ function getInitialReports() {
       facilityIcon: '❄️',
       description: 'Ceiling cassette AC unit #2 is leaking condensation water directly onto student desks at row 3.',
       urgency: 'Medium',
-      photo: DEMO_AC_SVG,
+      photo: null,
       reporterName: 'Irfan (Student)',
       reporterContact: 'irfan.std@siswa.edu.my',
       timestamp: new Date(Date.now() - 24 * 3600 * 1000).toISOString(),
@@ -120,7 +126,7 @@ export function createFacilityReportManager({ campus, onSelectRoom, showToast })
   let currentFacingMode = 'environment';
   let snappedPhotoData = null;
   let activeFilter = 'all';
-  let userRole = getUserRole(); // Defaults to 'admin' as requested
+  let userRole = getUserRole(); // Defaults to 'user'
 
   // Role & Admin Auth elements
   const roleBadge = document.getElementById('reports-role-badge');
@@ -402,20 +408,33 @@ export function createFacilityReportManager({ campus, onSelectRoom, showToast })
     }
     if (photoPreviewCard) {
       photoPreviewCard.hidden = false;
+      photoPreviewCard.style.display = 'flex';
     }
     if (photoCaptureActions) {
       photoCaptureActions.hidden = true;
+      photoCaptureActions.style.display = 'none';
     }
     if (cameraLiveBox) {
       cameraLiveBox.hidden = true;
+      cameraLiveBox.style.display = 'none';
     }
     if (formErrorEl) formErrorEl.hidden = true;
   }
 
   function clearSnappedPhoto() {
     snappedPhotoData = null;
-    if (photoPreviewCard) photoPreviewCard.hidden = true;
-    if (photoCaptureActions) photoCaptureActions.hidden = false;
+    if (photoPreviewImg) {
+      photoPreviewImg.src = '';
+      photoPreviewImg.removeAttribute('src');
+    }
+    if (photoPreviewCard) {
+      photoPreviewCard.hidden = true;
+      photoPreviewCard.style.display = 'none';
+    }
+    if (photoCaptureActions) {
+      photoCaptureActions.hidden = false;
+      photoCaptureActions.style.display = 'flex';
+    }
     if (photoFileInput) photoFileInput.value = '';
   }
 
@@ -561,6 +580,7 @@ export function createFacilityReportManager({ campus, onSelectRoom, showToast })
   function closeReportModal() {
     if (!reportModal) return;
     stopLiveCamera();
+    clearSnappedPhoto();
     reportModal.hidden = true;
     document.body.style.overflow = '';
   }
@@ -632,6 +652,9 @@ export function createFacilityReportManager({ campus, onSelectRoom, showToast })
     // Prepend to reports
     reports.unshift(newReport);
     saveReports();
+    if (isSupabaseConfigured) {
+      saveReportToSupabase(newReport);
+    }
 
     // Close report modal and show celebratory success modal
     closeReportModal();
@@ -755,7 +778,7 @@ export function createFacilityReportManager({ campus, onSelectRoom, showToast })
   adminAuthForm?.addEventListener('submit', (e) => {
     e.preventDefault();
     const pass = adminPasscodeInput?.value.trim().toLowerCase();
-    if (pass === 'admin' || pass === 'fcsit' || pass === 'admin123') {
+    if (pass === ADMIN_PASSCODE.toLowerCase()) {
       userRole = 'admin';
       setUserRole('admin');
       closeAdminAuthModal();
@@ -765,7 +788,7 @@ export function createFacilityReportManager({ campus, onSelectRoom, showToast })
       showToast('🛡️ Administrator verified: Master campus activity log unlocked');
     } else {
       if (adminAuthError) {
-        adminAuthError.textContent = 'Invalid administrator passcode. Default: admin';
+        adminAuthError.textContent = 'Invalid administrator passcode.';
         adminAuthError.hidden = false;
       }
       adminPasscodeInput?.select();
@@ -963,6 +986,9 @@ export function createFacilityReportManager({ campus, onSelectRoom, showToast })
       card.querySelector('.btn-item-toggle-status')?.addEventListener('click', () => {
         r.status = r.status === 'Resolved' ? 'Pending Review' : 'Resolved';
         saveReports();
+        if (isSupabaseConfigured) {
+          updateReportStatusInSupabase(r.id, r.status);
+        }
         renderReportsList(filterRoom);
         showToast(`Report ${r.id} marked as ${r.status}`);
       });
@@ -971,6 +997,9 @@ export function createFacilityReportManager({ campus, onSelectRoom, showToast })
       card.querySelector('.btn-item-delete')?.addEventListener('click', () => {
         reports = reports.filter((item) => item.id !== r.id);
         saveReports();
+        if (isSupabaseConfigured) {
+          deleteReportFromSupabase(r.id);
+        }
         renderReportsList(filterRoom);
         showToast(`Report ${r.id} deleted`);
       });
@@ -999,8 +1028,86 @@ export function createFacilityReportManager({ campus, onSelectRoom, showToast })
     lightbox.hidden = false;
   }
 
-  // Initial badge sync
+  // Initial badge sync & role header setup
   updateHudBadge();
+  updateRoleHeaderUI();
+
+  // -------------------------------------------------- Multi-Device Cloud Sync (Supabase)
+  function initCloudSync() {
+    const cloudSyncPill = document.getElementById('cloud-sync-pill');
+    const cloudSyncText = document.getElementById('cloud-sync-text');
+
+    if (cloudSyncPill && cloudSyncText) {
+      if (isSupabaseConfigured) {
+        cloudSyncPill.classList.remove('is-offline');
+        cloudSyncText.textContent = 'Cloud Live';
+      } else {
+        cloudSyncPill.classList.add('is-offline');
+        cloudSyncText.textContent = 'Local Mode';
+      }
+    }
+
+    if (!isSupabaseConfigured) return;
+
+    // Fetch master database records from Supabase
+    fetchReportsFromSupabase().then((remoteReports) => {
+      if (Array.isArray(remoteReports) && remoteReports.length > 0) {
+        reports = remoteReports;
+        try {
+          localStorage.setItem(STORAGE_KEY, JSON.stringify(reports));
+        } catch (e) {}
+        updateHudBadge();
+        if (reportsListModal && !reportsListModal.hidden) {
+          renderReportsList();
+        }
+      }
+    });
+
+    // Real-time synchronization across all devices
+    subscribeToRealtimeReports((payload) => {
+      const { eventType, new: newRecord, old: oldRecord } = payload;
+      if (eventType === 'INSERT' && newRecord) {
+        const incoming = fromDatabaseRow(newRecord);
+        if (!reports.some((r) => r.id === incoming.id)) {
+          reports.unshift(incoming);
+          try {
+            localStorage.setItem(STORAGE_KEY, JSON.stringify(reports));
+          } catch (e) {}
+          updateHudBadge();
+          if (reportsListModal && !reportsListModal.hidden) {
+            renderReportsList();
+          }
+          if (userRole === 'admin') {
+            showToast(`🔔 New report: ${incoming.roomName} (${incoming.facilityType})`);
+          }
+        }
+      } else if (eventType === 'UPDATE' && newRecord) {
+        const updated = fromDatabaseRow(newRecord);
+        const idx = reports.findIndex((r) => r.id === updated.id);
+        if (idx !== -1) {
+          reports[idx] = updated;
+          try {
+            localStorage.setItem(STORAGE_KEY, JSON.stringify(reports));
+          } catch (e) {}
+          updateHudBadge();
+          if (reportsListModal && !reportsListModal.hidden) {
+            renderReportsList();
+          }
+        }
+      } else if (eventType === 'DELETE' && oldRecord) {
+        reports = reports.filter((r) => r.id !== oldRecord.id);
+        try {
+          localStorage.setItem(STORAGE_KEY, JSON.stringify(reports));
+        } catch (e) {}
+        updateHudBadge();
+        if (reportsListModal && !reportsListModal.hidden) {
+          renderReportsList();
+        }
+      }
+    });
+  }
+
+  initCloudSync();
 
   return {
     openReportModal,
