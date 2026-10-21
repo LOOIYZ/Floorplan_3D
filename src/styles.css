@@ -5004,6 +5004,8 @@ input[type='range']::-webkit-slider-thumb:active {
   border: 1px solid rgba(16, 185, 129, 0.28);
   letter-spacing: 0.02em;
   transition: all 0.2s ease;
+  cursor: pointer;
+  user-select: none;
 }
 
 .cloud-sync-pill.is-offline {
@@ -5012,12 +5014,99 @@ input[type='range']::-webkit-slider-thumb:active {
   border-color: rgba(148, 163, 184, 0.28);
 }
 
+.cloud-sync-pill.is-syncing {
+  background: rgba(245, 158, 11, 0.14) !important;
+  color: #d97706 !important;
+  border-color: rgba(245, 158, 11, 0.35) !important;
+}
+
 .cloud-sync-dot {
   width: 6.5px;
   height: 6.5px;
   border-radius: 50%;
   background: currentColor;
   box-shadow: 0 0 6px currentColor;
+}
+
+.cloud-sync-pill.is-syncing .cloud-sync-dot {
+  animation: pulse-sync 0.8s infinite alternate;
+}
+
+@keyframes pulse-sync {
+  0% { opacity: 0.3; transform: scale(0.7); }
+  100% { opacity: 1; transform: scale(1.3); }
+}
+
+.reports-list-toolbar__actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.btn-refresh-reports {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 6px 12px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--navy);
+  background: #ffffff;
+  border: 1px solid rgba(148, 163, 184, 0.4);
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all 0.16s ease;
+}
+
+.btn-refresh-reports:hover {
+  background: #f8fafc;
+  border-color: rgba(148, 163, 184, 0.7);
+  transform: translateY(-1px);
+}
+
+.btn-refresh-reports.is-loading .refresh-icon {
+  display: inline-block;
+  animation: spin-refresh 0.8s linear infinite;
+}
+
+@keyframes spin-refresh {
+  100% { transform: rotate(360deg); }
+}
+
+.btn-spinner {
+  display: inline-block;
+  width: 14px;
+  height: 14px;
+  border: 2px solid rgba(255, 255, 255, 0.35);
+  border-top-color: #ffffff;
+  border-radius: 50%;
+  animation: spin-refresh 0.7s linear infinite;
+  margin-right: 6px;
+  vertical-align: middle;
+}
+
+.success-cloud-badge {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 12px;
+  padding: 8px 12px;
+  border-radius: 8px;
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1.35;
+}
+
+.success-cloud-badge.is-synced {
+  background: rgba(16, 185, 129, 0.12);
+  color: #047857;
+  border: 1px solid rgba(16, 185, 129, 0.28);
+}
+
+.success-cloud-badge.is-local {
+  background: rgba(245, 158, 11, 0.12);
+  color: #b45309;
+  border: 1px solid rgba(245, 158, 11, 0.28);
 }
 
 .reports-list-header__actions {

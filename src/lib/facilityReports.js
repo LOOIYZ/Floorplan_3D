@@ -591,7 +591,7 @@ export function createFacilityReportManager({ campus, onSelectRoom, showToast })
 
   // -------------------------------------------------- Form Submission
 
-  reportForm?.addEventListener('submit', (e) => {
+  reportForm?.addEventListener('submit', async (e) => {
     e.preventDefault();
 
     if (!currentSelectedRoom) {
@@ -649,21 +649,44 @@ export function createFacilityReportManager({ campus, onSelectRoom, showToast })
       status: 'Pending Review',
     };
 
-    // Prepend to reports
-    reports.unshift(newReport);
-    saveReports();
-    if (isSupabaseConfigured) {
-      saveReportToSupabase(newReport);
+    // Show loading indicator on submit button
+    const submitBtn = document.getElementById('report-submit-btn');
+    const originalBtnHtml = submitBtn ? submitBtn.innerHTML : '';
+    if (submitBtn) {
+      submitBtn.disabled = true;
+      submitBtn.innerHTML = `
+        <span class="btn-spinner"></span>
+        <span>Uploading to Cloud...</span>
+      `;
     }
 
-    // Close report modal and show celebratory success modal
+    // Attempt cloud upload if Supabase configured
+    let isCloudSynced = false;
+    if (isSupabaseConfigured) {
+      try {
+        isCloudSynced = await saveReportToSupabase(newReport);
+      } catch (err) {
+        console.warn('Failed to upload report to Supabase:', err);
+      }
+    }
+
+    // Prepend to reports and save locally
+    reports.unshift(newReport);
+    saveReports();
+
+    if (submitBtn) {
+      submitBtn.disabled = false;
+      submitBtn.innerHTML = originalBtnHtml;
+    }
+
+    // Close report modal and show celebratory success modal with cloud sync status
     closeReportModal();
-    openSuccessModal(newReport);
+    openSuccessModal(newReport, isCloudSynced);
   });
 
   // -------------------------------------------------- Success Modal
 
-  function openSuccessModal(report) {
+  function openSuccessModal(report, isCloudSynced = true) {
     if (!successModal) return;
 
     if (successTicketId) successTicketId.textContent = `Ticket #${report.id}`;
@@ -673,12 +696,23 @@ export function createFacilityReportManager({ campus, onSelectRoom, showToast })
         ? `<div class="success-photo-wrap"><img src="${report.photo}" alt="Report photo" /></div>`
         : `<div class="success-photo-placeholder">${report.facilityIcon}</div>`;
 
+      const cloudStatusHtml = isCloudSynced
+        ? `<div class="success-cloud-badge is-synced">
+             <span class="success-cloud-icon">☁️</span>
+             <span>Synced to Cloud Database · Available to Administration Immediately</span>
+           </div>`
+        : `<div class="success-cloud-badge is-local">
+             <span class="success-cloud-icon">💾</span>
+             <span>Saved to Device (Offline Mode) · Will auto-sync when connected</span>
+           </div>`;
+
       successSummaryBox.innerHTML = `
         ${photoHtml}
         <div class="success-details">
           <div class="success-room">${escapeHtml(report.roomName)} ${report.roomCode ? `<span class="code-pill">${escapeHtml(report.roomCode)}</span>` : ''}</div>
           <div class="success-facility">${report.facilityIcon} <strong>${escapeHtml(report.facilityType)}</strong> · <span class="urgency-tag urgency-tag--${report.urgency.toLowerCase()}">${report.urgency}</span></div>
           <div class="success-desc">"${escapeHtml(report.description)}"</div>
+          ${cloudStatusHtml}
         </div>
       `;
     }
@@ -714,6 +748,11 @@ export function createFacilityReportManager({ campus, onSelectRoom, showToast })
     renderReportsList(filterRoom);
     reportsListModal.hidden = false;
     document.body.style.overflow = 'hidden';
+
+    // Trigger cloud fetch so administrator and users immediately see newly uploaded reports from other devices
+    if (isSupabaseConfigured) {
+      refreshReportsFromCloud(false, filterRoom);
+    }
   }
 
   function closeReportsListModal() {
@@ -786,6 +825,9 @@ export function createFacilityReportManager({ campus, onSelectRoom, showToast })
       updateHudBadge();
       renderReportsList();
       showToast('🛡️ Administrator verified: Master campus activity log unlocked');
+      if (isSupabaseConfigured) {
+        refreshReportsFromCloud(false);
+      }
     } else {
       if (adminAuthError) {
         adminAuthError.textContent = 'Invalid administrator passcode.';
@@ -1033,6 +1075,76 @@ export function createFacilityReportManager({ campus, onSelectRoom, showToast })
   updateRoleHeaderUI();
 
   // -------------------------------------------------- Multi-Device Cloud Sync (Supabase)
+  async function refreshReportsFromCloud(showUserToast = false, filterRoom = null) {
+    if (!isSupabaseConfigured) return;
+
+    const cloudSyncPill = document.getElementById('cloud-sync-pill');
+    const cloudSyncText = document.getElementById('cloud-sync-text');
+    const refreshBtn = document.getElementById('btn-refresh-reports');
+
+    if (cloudSyncPill) cloudSyncPill.classList.add('is-syncing');
+    if (cloudSyncText) cloudSyncText.textContent = 'Syncing...';
+    if (refreshBtn) refreshBtn.classList.add('is-loading');
+
+    try {
+      const remoteReports = await fetchReportsFromSupabase();
+      if (Array.isArray(remoteReports)) {
+        const remoteMap = new Map(remoteReports.map((r) => [r.id, r]));
+
+        // Check if there are local reports created on this device that are missing in Supabase
+        const myDeviceId = getDeviceId();
+        const pendingLocalReports = reports.filter(
+          (r) => !remoteMap.has(r.id) &&
+                 r.deviceId === myDeviceId &&
+                 !r.id.startsWith('FAC-2026-8491') &&
+                 !r.id.startsWith('FAC-2026-7215')
+        );
+
+        // Upload any pending local reports to Supabase automatically
+        if (pendingLocalReports.length > 0) {
+          for (const localRep of pendingLocalReports) {
+            const ok = await saveReportToSupabase(localRep);
+            if (ok) {
+              remoteMap.set(localRep.id, localRep);
+            }
+          }
+        }
+
+        // Combine all remote reports, newest first
+        const merged = Array.from(remoteMap.values());
+        merged.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
+
+        reports = merged;
+        saveReports();
+        updateHudBadge();
+        if (reportsListModal && !reportsListModal.hidden) {
+          renderReportsList(filterRoom);
+        }
+
+        if (cloudSyncPill) {
+          cloudSyncPill.classList.remove('is-offline', 'is-syncing');
+          cloudSyncText.textContent = 'Cloud Live';
+        }
+
+        if (showUserToast) {
+          showToast(`✓ Cloud sync complete · ${reports.length} report${reports.length === 1 ? '' : 's'} updated`);
+        }
+      }
+    } catch (err) {
+      console.warn('[Supabase] Refresh error:', err);
+      if (cloudSyncPill) {
+        cloudSyncPill.classList.remove('is-syncing');
+        cloudSyncPill.classList.add('is-offline');
+        cloudSyncText.textContent = 'Offline';
+      }
+      if (showUserToast) {
+        showToast('⚠️ Could not connect to cloud database. Viewing cached reports.');
+      }
+    } finally {
+      if (refreshBtn) refreshBtn.classList.remove('is-loading');
+    }
+  }
+
   function initCloudSync() {
     const cloudSyncPill = document.getElementById('cloud-sync-pill');
     const cloudSyncText = document.getElementById('cloud-sync-text');
@@ -1047,21 +1159,19 @@ export function createFacilityReportManager({ campus, onSelectRoom, showToast })
       }
     }
 
+    // Attach click listeners for manual refresh
+    document.getElementById('btn-refresh-reports')?.addEventListener('click', () => {
+      refreshReportsFromCloud(true);
+    });
+
+    cloudSyncPill?.addEventListener('click', () => {
+      refreshReportsFromCloud(true);
+    });
+
     if (!isSupabaseConfigured) return;
 
-    // Fetch master database records from Supabase
-    fetchReportsFromSupabase().then((remoteReports) => {
-      if (Array.isArray(remoteReports) && remoteReports.length > 0) {
-        reports = remoteReports;
-        try {
-          localStorage.setItem(STORAGE_KEY, JSON.stringify(reports));
-        } catch (e) {}
-        updateHudBadge();
-        if (reportsListModal && !reportsListModal.hidden) {
-          renderReportsList();
-        }
-      }
-    });
+    // Initial sync and recovery of any pending local reports
+    refreshReportsFromCloud(false);
 
     // Real-time synchronization across all devices
     subscribeToRealtimeReports((payload) => {

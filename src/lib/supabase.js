@@ -3,12 +3,24 @@
  */
 import { createClient } from '@supabase/supabase-js';
 
-// Read config from Vite env or localStorage overrides
+// Default Supabase project credentials (public anon key safe for frontend clients)
+const DEFAULT_SUPABASE_URL = 'https://dedpuncuhywuybabliuo.supabase.co';
+const DEFAULT_SUPABASE_ANON_KEY =
+  'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImRlZHB1bmN1aHl3dXliYWJsaXVvIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTI1MDEyNTQsImV4cCI6MjEwODA3NzI1NH0.Cgu-jWDLeB1F5-yvVDHGpbGP281HlG8TLrBsw2_MVII';
+
+// Read config from Vite env, localStorage overrides, or default fallback
 const ENV_URL = import.meta.env.VITE_SUPABASE_URL || '';
 const ENV_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY || '';
 
-const supabaseUrl = ENV_URL || localStorage.getItem('fcsit_supabase_url') || '';
-const supabaseAnonKey = ENV_KEY || localStorage.getItem('fcsit_supabase_key') || '';
+const supabaseUrl =
+  ENV_URL ||
+  localStorage.getItem('fcsit_supabase_url') ||
+  DEFAULT_SUPABASE_URL;
+
+const supabaseAnonKey =
+  ENV_KEY ||
+  localStorage.getItem('fcsit_supabase_key') ||
+  DEFAULT_SUPABASE_ANON_KEY;
 
 export const isSupabaseConfigured = Boolean(
   supabaseUrl &&

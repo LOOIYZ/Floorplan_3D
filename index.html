@@ -957,9 +957,15 @@
               <button type="button" class="filter-tab" data-filter="pending">Pending (<span id="reports-count-pending">0</span>)</button>
               <button type="button" class="filter-tab" data-filter="resolved">Resolved (<span id="reports-count-resolved">0</span>)</button>
             </div>
-            <button type="button" class="btn-new-report-sm" id="btn-list-new-report">
-              + Report New Issue
-            </button>
+            <div class="reports-list-toolbar__actions">
+              <button type="button" class="btn-refresh-reports" id="btn-refresh-reports" title="Refresh reports from cloud database">
+                <span class="refresh-icon">🔄</span>
+                <span>Refresh</span>
+              </button>
+              <button type="button" class="btn-new-report-sm" id="btn-list-new-report">
+                + Report New Issue
+              </button>
+            </div>
           </div>
 
           <div class="reports-list-body" id="reports-list-body"></div>
